@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -55,8 +54,11 @@
       <input type="text" id="vin" name="vin" required minlength="17" maxlength="17" />
       <button type="button" onclick="startScanner()">Scan VIN</button>
 
-      <label for="gallons">Gallons:</label>
-      <input type="number" id="gallons" name="gallons" required step="0.01" />
+      <label for="start-gallons">Start Gallons:</label>
+      <input type="number" id="start-gallons" name="start_gallons" required step="0.01" />
+
+      <label for="end-gallons">End Gallons:</label>
+      <input type="number" id="end-gallons" name="end_gallons" required step="0.01" />
 
       <label for="date">Date:</label>
       <input type="date" id="date" name="date" required />
@@ -79,26 +81,15 @@
     <div id="confirmation-box">
       <p><strong>Confirm Your Entry:</strong></p>
       <p id="confirm-vin"></p>
-      <p id="confirm-gallons"></p>
+      <p id="confirm-start-gallons"></p>
+      <p id="confirm-end-gallons"></p>
       <p id="confirm-date"></p>
       <p id="confirm-user"></p>
       <button onclick="finalSubmit()">Confirm and Submit</button>
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js">
-    // Auto-login if previous user exists
-    window.onload = function () {
-      const lastUser = localStorage.getItem("lastUser");
-      if (lastUser) {
-        currentUser = lastUser;
-        document.getElementById("username").value = currentUser;
-        document.getElementById("login-page").classList.add("hidden");
-        document.getElementById("form-page").classList.remove("hidden");
-      }
-    };
-    </script>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
   <script>
     const scriptURL = "https://script.google.com/macros/s/AKfycbzmN-pEhSgdaEvuQnjo4jbQrNX0wW6Se6-znFNhPIgFG5p5HiNVu2Aj6DXt3lTiaGtL/exec";
     let currentUser = "";
@@ -110,9 +101,9 @@
 
       if (user && /^\d{4}$/.test(pass)) {
         localStorage.setItem(`fueluser_${user}`, pass);
+        localStorage.setItem("lastUser", user);
         currentUser = user;
         document.getElementById("username").value = currentUser;
-        localStorage.setItem("lastUser", user);
         document.getElementById("login-page").classList.add("hidden");
         document.getElementById("form-page").classList.remove("hidden");
       } else {
@@ -120,10 +111,26 @@
       }
     }
 
+    window.onload = function () {
+      const lastUser = localStorage.getItem("lastUser");
+      if (lastUser) {
+        currentUser = lastUser;
+        document.getElementById("username").value = currentUser;
+        document.getElementById("login-page").classList.add("hidden");
+        document.getElementById("form-page").classList.remove("hidden");
+      }
+    };
+
     function startScanner() {
       document.getElementById("scanner-overlay").style.display = "flex";
       Quagga.init({
-        inputStream: { name: "Live", type: "LiveStream", numOfWorkers: 4, target: document.getElementById("scanner-container"), constraints: { width: { min: 640 }, height: { min: 480 }, facingMode: "environment" } },
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          numOfWorkers: 4,
+          target: document.getElementById("scanner-container"),
+          constraints: { width: { min: 640 }, height: { min: 480 }, facingMode: "environment" }
+        },
         decoder: { readers: ["code_39_reader", "code_128_reader", "code_39_vin_reader", "ean_reader", "upc_reader"] }
       }, err => {
         if (err) { alert("Scanner error"); return; }
@@ -139,25 +146,30 @@
     }
 
     function stopScanner() {
-      Quagga.offDetected();
       Quagga.stop();
       Quagga.offDetected();
       document.getElementById("scanner-overlay").style.display = "none";
-      const container = document.getElementById("scanner-container");
-      container.innerHTML = "";
+      document.getElementById("scanner-container").innerHTML = "";
     }
 
     document.getElementById("fuelForm").addEventListener("submit", e => {
       e.preventDefault();
+      const startGallons = parseFloat(document.getElementById("start-gallons").value);
+      const endGallons = parseFloat(document.getElementById("end-gallons").value);
+      const usedGallons = endGallons - startGallons;
+
       formData = {
         vin: document.getElementById("vin").value,
-        gallons: document.getElementById("gallons").value,
+        start_gallons: startGallons,
+        end_gallons: endGallons,
+        used_gallons: usedGallons,
         date: document.getElementById("date").value,
         user: currentUser
       };
 
       document.getElementById("confirm-vin").textContent = "VIN: " + formData.vin;
-      document.getElementById("confirm-gallons").textContent = "Gallons: " + formData.gallons;
+      document.getElementById("confirm-start-gallons").textContent = "Start Gallons: " + formData.start_gallons;
+      document.getElementById("confirm-end-gallons").textContent = "End Gallons: " + formData.end_gallons + " (Used: " + formData.used_gallons + ")";
       document.getElementById("confirm-date").textContent = "Date: " + formData.date;
       document.getElementById("confirm-user").textContent = "User: " + formData.user;
 
@@ -184,18 +196,6 @@
         document.getElementById("successMessage").textContent = "Submission failed.";
       }
     }
-  
-    // Auto-login if previous user exists
-    window.onload = function () {
-      const lastUser = localStorage.getItem("lastUser");
-      if (lastUser) {
-        currentUser = lastUser;
-        document.getElementById("username").value = currentUser;
-        document.getElementById("login-page").classList.add("hidden");
-        document.getElementById("form-page").classList.remove("hidden");
-      }
-    };
-    </script>
-
+  </script>
 </body>
 </html>
