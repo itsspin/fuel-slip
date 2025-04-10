@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,7 +45,7 @@
     <h1>Login</h1>
     <input type="text" id="login-user" placeholder="Username" required />
     <input type="password" id="login-pass" placeholder="4-digit PIN" required pattern="\d{4}" />
-    <button onclick="handleLogin()">Login / Register</button>
+    <button onclick="handleLogin()">Login</button>
   </div>
 
   <div id="form-page" class="hidden">
@@ -99,27 +100,31 @@
       const user = document.getElementById("login-user").value.trim();
       const pass = document.getElementById("login-pass").value.trim();
 
-      if (user && /^\d{4}$/.test(pass)) {
-        localStorage.setItem(`fueluser_${user}`, pass);
-        localStorage.setItem("lastUser", user);
-        currentUser = user;
-        document.getElementById("username").value = currentUser;
-        document.getElementById("login-page").classList.add("hidden");
-        document.getElementById("form-page").classList.remove("hidden");
-      } else {
+      if (!user || !/^\d{4}$/.test(pass)) {
         alert("Please enter a valid username and 4-digit PIN.");
+        return;
       }
-    }
 
-    window.onload = function () {
-      const lastUser = localStorage.getItem("lastUser");
-      if (lastUser) {
-        currentUser = lastUser;
-        document.getElementById("username").value = currentUser;
-        document.getElementById("login-page").classList.add("hidden");
-        document.getElementById("form-page").classList.remove("hidden");
-      }
-    };
+      fetch(scriptURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "validateUser", username: user, password: pass })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          currentUser = user;
+          document.getElementById("username").value = currentUser;
+          document.getElementById("login-page").classList.add("hidden");
+          document.getElementById("form-page").classList.remove("hidden");
+        } else {
+          alert("Invalid credentials. Please try again.");
+        }
+      })
+      .catch(err => {
+        alert("Error connecting to login system.");
+      });
+    }
 
     function startScanner() {
       document.getElementById("scanner-overlay").style.display = "flex";
