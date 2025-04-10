@@ -139,9 +139,12 @@
     }
 
     function stopScanner() {
+      Quagga.offDetected();
       Quagga.stop();
       Quagga.offDetected();
       document.getElementById("scanner-overlay").style.display = "none";
+      const container = document.getElementById("scanner-container");
+      container.innerHTML = "";
     }
 
     document.getElementById("fuelForm").addEventListener("submit", e => {
