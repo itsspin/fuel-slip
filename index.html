@@ -11,7 +11,34 @@
     label { display: block; margin-top: 15px; }
     input, button { width: 100%; padding: 10px; margin-top: 5px; }
     button { background-color: #2e6da4; color: white; border: none; }
-    #scanner-container { display: none; margin-top: 10px; border: 2px dashed #ccc; height: 250px; }
+    #scanner-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.8);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+    #scanner-container {
+      width: 100%;
+      height: 60vh;
+      background-color: #000;
+    }
+    #close-scan {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 24px;
+      background: red;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      cursor: pointer;
+      z-index: 10000;
+    }
     .success { color: green; margin-top: 10px; text-align: center; }
   </style>
 </head>
@@ -21,7 +48,6 @@
     <label for="vin">VIN:</label>
     <input type="text" id="vin" name="vin" placeholder="Scan or enter VIN" required minlength="17" maxlength="17"/>
     <button type="button" id="start-scan">Scan VIN</button>
-    <div id="scanner-container"></div>
 
     <label for="gallons">Gallons:</label>
     <input type="number" id="gallons" name="gallons" required step="0.01"/>
@@ -36,15 +62,22 @@
   </form>
   <div class="success" id="successMessage"></div>
 
+  <div id="scanner-overlay">
+    <button id="close-scan">X</button>
+    <div id="scanner-container"></div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
   <script>
     const form = document.getElementById("fuelForm");
+    const scannerOverlay = document.getElementById("scanner-overlay");
     const scannerContainer = document.getElementById("scanner-container");
+    const closeScanBtn = document.getElementById("close-scan");
     const successMessage = document.getElementById("successMessage");
     const scriptURL = "https://script.google.com/macros/s/AKfycbzmN-pEhSgdaEvuQnjo4jbQrNX0wW6Se6-znFNhPIgFG5p5HiNVu2Aj6DXt3lTiaGtL/exec";
 
     document.getElementById("start-scan").addEventListener("click", () => {
-      scannerContainer.style.display = "block";
+      scannerOverlay.style.display = "flex";
 
       Quagga.init({
         inputStream: {
@@ -71,11 +104,18 @@
         const code = data.codeResult.code;
         if (code.length === 17) {
           document.getElementById("vin").value = code;
-          Quagga.stop();
-          scannerContainer.style.display = "none";
+          stopScanner();
         }
       });
     });
+
+    closeScanBtn.addEventListener("click", stopScanner);
+
+    function stopScanner() {
+      Quagga.stop();
+      Quagga.offDetected();
+      scannerOverlay.style.display = "none";
+    }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
