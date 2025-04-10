@@ -86,7 +86,19 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js">
+    // Auto-login if previous user exists
+    window.onload = function () {
+      const lastUser = localStorage.getItem("lastUser");
+      if (lastUser) {
+        currentUser = lastUser;
+        document.getElementById("username").value = currentUser;
+        document.getElementById("login-page").classList.add("hidden");
+        document.getElementById("form-page").classList.remove("hidden");
+      }
+    };
+    </script>
+
   <script>
     const scriptURL = "https://script.google.com/macros/s/AKfycbzmN-pEhSgdaEvuQnjo4jbQrNX0wW6Se6-znFNhPIgFG5p5HiNVu2Aj6DXt3lTiaGtL/exec";
     let currentUser = "";
@@ -100,6 +112,7 @@
         localStorage.setItem(`fueluser_${user}`, pass);
         currentUser = user;
         document.getElementById("username").value = currentUser;
+        localStorage.setItem("lastUser", user);
         document.getElementById("login-page").classList.add("hidden");
         document.getElementById("form-page").classList.remove("hidden");
       } else {
@@ -168,6 +181,18 @@
         document.getElementById("successMessage").textContent = "Submission failed.";
       }
     }
-  </script>
+  
+    // Auto-login if previous user exists
+    window.onload = function () {
+      const lastUser = localStorage.getItem("lastUser");
+      if (lastUser) {
+        currentUser = lastUser;
+        document.getElementById("username").value = currentUser;
+        document.getElementById("login-page").classList.add("hidden");
+        document.getElementById("form-page").classList.remove("hidden");
+      }
+    };
+    </script>
+
 </body>
 </html>
