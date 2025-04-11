@@ -5,98 +5,161 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Midway Ford Fuel Slip</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    h1 { text-align: center; color: #1a1a1a; }
-    label { display: block; margin-top: 15px; }
-    input, button { width: 100%; padding: 10px; margin-top: 5px; }
-    button { background-color: #2e6da4; color: white; border: none; }
-    #scanner-container { display: none; margin-top: 10px; border: 2px dashed #ccc; height: 250px; }
-    .success { color: green; margin-top: 10px; text-align: center; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+      background-color: #f7f7f7;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #scanner-container {
+      display: none;
+      margin-top: 10px;
+      border: 2px dashed #ccc;
+      height: 250px;
+    }
+    .success {
+      color: green;
+      margin-top: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
+    .error {
+      color: red;
+      margin-top: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
   <h1>Midway Ford Fuel Slip</h1>
   <form id="fuelForm">
-    <label for="vin">VIN:</label>
-    <input type="text" id="vin" name="vin" placeholder="Scan or enter VIN" required minlength="17" maxlength="17"/>
-    <button type="button" id="start-scan">Scan VIN</button>
-    <div id="scanner-container"></div>
+    <label for="vin">VIN (Last 8 Characters):</label>
+    <input type="text" id="vin" name="vin" maxlength="8" required />
 
-    <label for="gallons">Gallons:</label>
-    <input type="number" id="gallons" name="gallons" required step="0.01"/>
+    <button type="button" onclick="startScanner()">Scan VIN</button>
+    <div id="scanner-container">
+      <!-- Scanner integration can go here -->
+    </div>
+
+    <label for="startGallons">Start Gallons:</label>
+    <input type="number" id="startGallons" name="startGallons" required />
+
+    <label for="endGallons">End Gallons:</label>
+    <input type="number" id="endGallons" name="endGallons" required />
+
+    <label for="gallonsUsed">Gallons Used:</label>
+    <input type="number" id="gallonsUsed" name="gallonsUsed" readonly />
 
     <label for="date">Date:</label>
-    <input type="date" id="date" name="date" required />
+    <input type="text" id="date" name="date" readonly />
 
-    <label for="user">User:</label>
-    <input type="text" id="user" name="user" required />
+    <label for="initials">Initials:</label>
+    <input type="text" id="initials" name="initials" maxlength="4" required />
+
+    <input type="hidden" id="ip" name="ip" />
 
     <button type="submit">Submit</button>
   </form>
+
   <div class="success" id="successMessage"></div>
+  <div class="error" id="errorMessage"></div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
   <script>
-    const form = document.getElementById("fuelForm");
-    const scannerContainer = document.getElementById("scanner-container");
-    const successMessage = document.getElementById("successMessage");
-    const scriptURL = "https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec";
+    const dateField = document.getElementById('date');
+    const now = new Date();
+    const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
+    dateField.value = new Intl.DateTimeFormat('en-US', options).format(now);
 
-    document.getElementById("start-scan").addEventListener("click", () => {
-      scannerContainer.style.display = "block";
+    document.getElementById('startGallons').addEventListener('input', calculateGallonsUsed);
+    document.getElementById('endGallons').addEventListener('input', calculateGallonsUsed);
 
-      Quagga.init({
-        inputStream: {
-          name: "Live",
-          type: "LiveStream",
-          target: scannerContainer,
-          constraints: {
-            facingMode: "environment"
-          }
-        },
-        decoder: {
-          readers: ["code_39_reader", "code_128_reader"]
-        }
-      }, function(err) {
-        if (err) {
-          console.error(err);
-          alert("Error starting scanner.");
-          return;
-        }
-        Quagga.start();
+    function calculateGallonsUsed() {
+      const start = parseFloat(document.getElementById('startGallons').value) || 0;
+      const end = parseFloat(document.getElementById('endGallons').value) || 0;
+      const used = end - start;
+      document.getElementById('gallonsUsed').value = used >= 0 ? used : 0;
+    }
+
+    // Fetch IP address
+    fetch('https://api.ipify.org?format=json')
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('ip').value = data.ip;
+      })
+      .catch(error => {
+        console.error('IP fetch error:', error);
       });
 
-      Quagga.onDetected(data => {
-        const code = data.codeResult.code;
-        if (code.length === 17) {
-          document.getElementById("vin").value = code;
-          Quagga.stop();
-          scannerContainer.style.display = "none";
-        }
-      });
-    });
-
-    form.addEventListener("submit", async (e) => {
+    document.getElementById('fuelForm').addEventListener('submit', function(e) {
       e.preventDefault();
-      const data = {
-        vin: form.vin.value,
-        gallons: form.gallons.value,
-        date: form.date.value,
-        user: form.user.value,
+      document.getElementById('successMessage').textContent = '';
+      document.getElementById('errorMessage').textContent = '';
+
+      const formData = {
+        vin: document.getElementById('vin').value.trim(),
+        startGallons: document.getElementById('startGallons').value,
+        endGallons: document.getElementById('endGallons').value,
+        gallonsUsed: document.getElementById('gallonsUsed').value,
+        date: document.getElementById('date').value,
+        initials: document.getElementById('initials').value.trim().toUpperCase(),
+        ip: document.getElementById('ip').value
       };
-      try {
-        await fetch(scriptURL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        });
-        successMessage.textContent = "Fuel slip submitted!";
-        form.reset();
-      } catch (error) {
-        successMessage.textContent = "Submission failed. Please try again.";
-      }
+
+      fetch('https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      })
+      .then(res => res.json())
+      .then(response => {
+        if (response.result === 'success') {
+          document.getElementById('successMessage').textContent = 'Submission successful!';
+          document.getElementById('fuelForm').reset();
+          dateField.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+        } else {
+          document.getElementById('errorMessage').textContent = 'Submission failed. Please try again.';
+        }
+      })
+      .catch(error => {
+        console.error('Submission error:', error);
+        document.getElementById('errorMessage').textContent = 'Error sending data. Check connection.';
+      });
     });
+
+    function startScanner() {
+      alert('Scanner functionality not implemented. Enter full VIN and use last 8.');
+      // In production, integrate a barcode scanner and extract last 8:
+      // const fullVin = "1HGCM82633A123456";
+      // document.getElementById('vin').value = fullVin.slice(-8);
+    }
   </script>
 </body>
 </html>
