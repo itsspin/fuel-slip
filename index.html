@@ -23,7 +23,9 @@
       border-radius: 10px;
       padding: 1.2rem;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      display: none;
     }
+    .visible { display: block !important; }
     label {
       display: block;
       margin: 0.8rem 0 0.2rem;
@@ -65,31 +67,46 @@
 <body>
   <h1>Midway Ford Fuel Slip</h1>
 
-  <form id="fuelForm" class="card">
+  <!-- Fuel Form -->
+  <form id="fuelForm" class="card visible">
     <label for="vin">VIN (Last 8 Characters):</label>
-    <input type="text" name="vin" id="vin" maxlength="8" required />
+    <input type="text" id="vin" maxlength="8" required />
     <button type="button" id="scanBtn">Scan VIN Barcode</button>
     <video id="scanner" autoplay muted playsinline></video>
 
     <label for="startGallons">Start Gallons:</label>
-    <input type="number" name="startGallons" id="startGallons" step="0.1" required />
+    <input type="number" id="startGallons" step="0.1" required />
 
     <label for="endGallons">End Gallons:</label>
-    <input type="number" name="endGallons" id="endGallons" step="0.1" required />
+    <input type="number" id="endGallons" step="0.1" required />
 
     <label for="gallonsUsed">Gallons Used:</label>
-    <input type="number" name="gallonsUsed" id="gallonsUsed" step="0.1" readonly />
+    <input type="number" id="gallonsUsed" step="0.1" readonly />
 
     <label for="date">Date:</label>
-    <input type="text" name="date" id="date" readonly />
+    <input type="text" id="date" readonly />
 
     <label for="initials">Initials:</label>
-    <input type="text" name="initials" id="initials" maxlength="4" required />
+    <input type="text" id="initials" maxlength="4" required />
 
     <button type="submit">Submit</button>
   </form>
 
-  <div class="card" id="confirmation" style="display:none; margin-top: 2rem;">
+  <!-- Confirmation Page -->
+  <div id="confirmationPage" class="card">
+    <h2>Confirm Your Entry</h2>
+    <p><strong>VIN:</strong> <span id="conf-vin"></span></p>
+    <p><strong>Start Gallons:</strong> <span id="conf-start"></span></p>
+    <p><strong>End Gallons:</strong> <span id="conf-end"></span></p>
+    <p><strong>Gallons Used:</strong> <span id="conf-used"></span></p>
+    <p><strong>Date:</strong> <span id="conf-date"></span></p>
+    <p><strong>Initials:</strong> <span id="conf-user"></span></p>
+    <button id="confirmSubmit">Confirm & Submit</button>
+    <button onclick="goBack()">Go Back</button>
+  </div>
+
+  <!-- Final Submission Confirmation -->
+  <div id="finalConfirmation" class="card">
     <h2>Fuel Slip Submitted</h2>
     <p><strong>VIN:</strong> <span id="c-vin"></span></p>
     <p><strong>Start Gallons:</strong> <span id="c-start"></span></p>
@@ -108,8 +125,17 @@
     const used = document.getElementById("gallonsUsed");
     const date = document.getElementById("date");
     const initials = document.getElementById("initials");
-    const form = document.getElementById("fuelForm");
-    const successBox = document.getElementById("confirmation");
+
+    const fuelForm = document.getElementById("fuelForm");
+    const confirmationPage = document.getElementById("confirmationPage");
+    const finalConfirmation = document.getElementById("finalConfirmation");
+
+    const confVin = document.getElementById("conf-vin");
+    const confStart = document.getElementById("conf-start");
+    const confEnd = document.getElementById("conf-end");
+    const confUsed = document.getElementById("conf-used");
+    const confDate = document.getElementById("conf-date");
+    const confUser = document.getElementById("conf-user");
 
     const cVin = document.getElementById("c-vin");
     const cStart = document.getElementById("c-start");
@@ -130,9 +156,21 @@
     start.addEventListener("input", calc);
     end.addEventListener("input", calc);
 
-    form.addEventListener("submit", async (e) => {
+    fuelForm.addEventListener("submit", (e) => {
       e.preventDefault();
 
+      confVin.textContent = vin.value.trim().toUpperCase();
+      confStart.textContent = start.value;
+      confEnd.textContent = end.value;
+      confUsed.textContent = used.value;
+      confDate.textContent = date.value;
+      confUser.textContent = initials.value.trim().toUpperCase();
+
+      fuelForm.classList.remove("visible");
+      confirmationPage.classList.add("visible");
+    });
+
+    document.getElementById("confirmSubmit").addEventListener("click", async () => {
       const data = new URLSearchParams();
       data.append("vin", vin.value.trim().toUpperCase());
       data.append("startGallons", start.value);
@@ -154,11 +192,16 @@
       cDate.textContent = date.value;
       cUser.textContent = initials.value.toUpperCase();
 
-      form.style.display = "none";
-      successBox.style.display = "block";
+      confirmationPage.classList.remove("visible");
+      finalConfirmation.classList.add("visible");
     });
 
-    // VIN Scanner
+    function goBack() {
+      confirmationPage.classList.remove("visible");
+      fuelForm.classList.add("visible");
+    }
+
+    // VIN SCANNER CONFIG
     document.getElementById("scanBtn").addEventListener("click", () => {
       const video = document.getElementById("scanner");
 
@@ -181,7 +224,7 @@
           constraints: {
             facingMode: { ideal: "environment" },
             width: { min: 640 },
-            height: { min: 480 },
+            height: { min: 480 }
           }
         },
         decoder: {
@@ -189,10 +232,10 @@
         },
         locate: true,
         numOfWorkers: navigator.hardwareConcurrency || 2
-      }, function (err) {
+      }, function(err) {
         if (err) {
           console.error("Quagga init error:", err);
-          alert("Unable to access camera. Be sure you're using HTTPS and allowed camera access.");
+          alert("Could not access camera. Ensure you're using HTTPS and have granted permission.");
           video.style.display = "none";
           return;
         }
@@ -201,7 +244,7 @@
         Quagga.start();
       });
 
-      Quagga.onDetected(function (result) {
+      Quagga.onDetected(function(result) {
         const code = result.codeResult.code;
         if (code.length >= 8) {
           vin.value = code.slice(-8).toUpperCase();
