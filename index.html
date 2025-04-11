@@ -18,11 +18,12 @@
       font-size: 1.8rem;
       margin-bottom: 1.2rem;
     }
-    form, #confirmation {
+    form, .card {
       background: #fff;
       border-radius: 10px;
       padding: 1.2rem;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      display: none;
     }
     label {
       display: block;
@@ -60,16 +61,14 @@
       width: 100%;
       margin-top: 1rem;
     }
-    #confirmation {
-      display: none;
-      margin-top: 2rem;
-    }
+    .visible { display: block !important; }
   </style>
 </head>
 <body>
   <h1>Midway Ford Fuel Slip</h1>
 
-  <form id="fuelForm">
+  <!-- Fuel Form -->
+  <form id="fuelForm" class="card visible">
     <label for="vin">VIN (Last 8 Characters):</label>
     <input type="text" name="vin" id="vin" maxlength="8" required />
     <button type="button" id="scanBtn">Scan VIN Barcode</button>
@@ -93,8 +92,21 @@
     <button type="submit">Submit</button>
   </form>
 
-  <!-- Confirmation Slip -->
-  <div id="confirmation">
+  <!-- Confirmation Page -->
+  <div id="confirmationPage" class="card">
+    <h2>Confirm Details</h2>
+    <p><strong>VIN:</strong> <span id="conf-vin"></span></p>
+    <p><strong>Start Gallons:</strong> <span id="conf-start"></span></p>
+    <p><strong>End Gallons:</strong> <span id="conf-end"></span></p>
+    <p><strong>Gallons Used:</strong> <span id="conf-used"></span></p>
+    <p><strong>Date:</strong> <span id="conf-date"></span></p>
+    <p><strong>Initials:</strong> <span id="conf-user"></span></p>
+    <button id="confirmSubmit">Confirm & Submit</button>
+    <button onclick="goBack()">Go Back</button>
+  </div>
+
+  <!-- Final Slip -->
+  <div id="confirmation" class="card">
     <h2>Fuel Slip Submitted</h2>
     <p><strong>VIN:</strong> <span id="c-vin"></span></p>
     <p><strong>Start Gallons:</strong> <span id="c-start"></span></p>
@@ -113,8 +125,10 @@
     const used = document.getElementById("gallonsUsed");
     const date = document.getElementById("date");
     const initials = document.getElementById("initials");
-    const form = document.getElementById("fuelForm");
-    const confirmBox = document.getElementById("confirmation");
+
+    const fuelForm = document.getElementById("fuelForm");
+    const confirmationPage = document.getElementById("confirmationPage");
+    const finalConfirmation = document.getElementById("confirmation");
 
     const cVin = document.getElementById("c-vin");
     const cStart = document.getElementById("c-start");
@@ -122,6 +136,13 @@
     const cUsed = document.getElementById("c-used");
     const cDate = document.getElementById("c-date");
     const cUser = document.getElementById("c-user");
+
+    const confVin = document.getElementById("conf-vin");
+    const confStart = document.getElementById("conf-start");
+    const confEnd = document.getElementById("conf-end");
+    const confUsed = document.getElementById("conf-used");
+    const confDate = document.getElementById("conf-date");
+    const confUser = document.getElementById("conf-user");
 
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
     date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
@@ -168,10 +189,24 @@
       });
     });
 
-    // Form submit
-    form.addEventListener("submit", async (e) => {
+    // Form "submit" triggers confirmation preview
+    fuelForm.addEventListener("submit", (e) => {
       e.preventDefault();
 
+      // Fill preview
+      confVin.textContent = vin.value.trim().toUpperCase();
+      confStart.textContent = start.value;
+      confEnd.textContent = end.value;
+      confUsed.textContent = used.value;
+      confDate.textContent = date.value;
+      confUser.textContent = initials.value.trim().toUpperCase();
+
+      fuelForm.classList.remove("visible");
+      confirmationPage.classList.add("visible");
+    });
+
+    // Confirm & Submit
+    document.getElementById("confirmSubmit").addEventListener("click", async () => {
       const data = new URLSearchParams();
       data.append("vin", vin.value.trim().toUpperCase());
       data.append("startGallons", start.value);
@@ -186,7 +221,7 @@
         body: data
       });
 
-      // Fill confirmation slip
+      // Final confirmation slip
       cVin.textContent = vin.value.trim().toUpperCase();
       cStart.textContent = start.value;
       cEnd.textContent = end.value;
@@ -194,9 +229,15 @@
       cDate.textContent = date.value;
       cUser.textContent = initials.value.trim().toUpperCase();
 
-      form.style.display = "none";
-      confirmBox.style.display = "block";
+      confirmationPage.classList.remove("visible");
+      finalConfirmation.classList.add("visible");
     });
+
+    // Go back from confirmation page
+    function goBack() {
+      confirmationPage.classList.remove("visible");
+      fuelForm.classList.add("visible");
+    }
   </script>
 </body>
 </html>
