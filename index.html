@@ -3,70 +3,124 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Fuel Slip</title>
+  <title>Midway Ford Fuel Slip</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+      background-color: #f4f4f4;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .success {
+      color: green;
+      margin-top: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
+
   <h1>Midway Ford Fuel Slip</h1>
 
   <form id="fuelForm">
-    <label>VIN (Last 8):</label>
-    <input type="text" name="vin" maxlength="8" required><br><br>
+    <label for="vin">VIN (Last 8 Characters):</label>
+    <input type="text" id="vin" name="vin" maxlength="8" required />
 
-    <label>Start Gallons:</label>
-    <input type="number" name="startGallons" required><br><br>
+    <label for="startGallons">Start Gallons:</label>
+    <input type="number" id="startGallons" name="startGallons" required />
 
-    <label>End Gallons:</label>
-    <input type="number" name="endGallons" required><br><br>
+    <label for="endGallons">End Gallons:</label>
+    <input type="number" id="endGallons" name="endGallons" required />
 
-    <label>Gallons Used:</label>
-    <input type="number" name="gallonsUsed" readonly><br><br>
+    <label for="gallonsUsed">Gallons Used:</label>
+    <input type="number" id="gallonsUsed" name="gallonsUsed" readonly />
 
-    <label>Date:</label>
-    <input type="text" name="date" readonly><br><br>
+    <label for="date">Date:</label>
+    <input type="text" id="date" name="date" readonly />
 
-    <label>Initials:</label>
-    <input type="text" name="initials" maxlength="4" required><br><br>
+    <label for="initials">Initials:</label>
+    <input type="text" id="initials" name="initials" maxlength="4" required />
 
     <button type="submit">Submit</button>
   </form>
 
-  <p id="message" style="font-weight:bold;"></p>
+  <div class="success" id="successMessage"></div>
 
   <script>
     const form = document.getElementById("fuelForm");
-    const message = document.getElementById("message");
+    const successMessage = document.getElementById("successMessage");
 
+    // Set date to today's date in CST
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
-    form.date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+    document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-    function calcUsed() {
-      const start = parseFloat(form.startGallons.value) || 0;
-      const end = parseFloat(form.endGallons.value) || 0;
-      form.gallonsUsed.value = end - start >= 0 ? (end - start).toFixed(2) : 0;
+    // Calculate gallons used
+    function calculateGallonsUsed() {
+      const start = parseFloat(document.getElementById("startGallons").value) || 0;
+      const end = parseFloat(document.getElementById("endGallons").value) || 0;
+      document.getElementById("gallonsUsed").value = end - start >= 0 ? (end - start).toFixed(2) : 0;
     }
 
-    form.startGallons.addEventListener('input', calcUsed);
-    form.endGallons.addEventListener('input', calcUsed);
+    document.getElementById("startGallons").addEventListener("input", calculateGallonsUsed);
+    document.getElementById("endGallons").addEventListener("input", calculateGallonsUsed);
 
+    // Submit form
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const formData = new URLSearchParams(new FormData(form));
+      const data = {
+        vin: document.getElementById("vin").value.trim(),
+        startGallons: document.getElementById("startGallons").value,
+        endGallons: document.getElementById("endGallons").value,
+        gallonsUsed: document.getElementById("gallonsUsed").value,
+        date: document.getElementById("date").value,
+        initials: document.getElementById("initials").value.trim().toUpperCase()
+      };
 
-      const response = await fetch("https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: formData
-      });
+      try {
+        const response = await fetch("https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(data)
+        });
 
-      const text = await response.text();
-      console.log("Response:", text);
-      message.textContent = "Fuel slip submitted!";
-      form.reset();
-      form.date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+        const text = await response.text();
+        console.log("Server Response:", text);
+
+        successMessage.textContent = "Fuel slip submitted!";
+        form.reset();
+        document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+      } catch (error) {
+        console.error("Submit error:", error);
+        successMessage.textContent = "Submission failed.";
+      }
     });
   </script>
+
 </body>
 </html>
