@@ -76,32 +76,33 @@
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
     document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-    // Calculate gallons used live
+    // Live calculation of gallons used
     function calculateGallonsUsed() {
-      const start = parseFloat(form.startGallons.value) || 0;
-      const end = parseFloat(form.endGallons.value) || 0;
-      form.gallonsUsed.value = end - start >= 0 ? end - start : 0;
+      const start = parseFloat(document.getElementById("startGallons").value) || 0;
+      const end = parseFloat(document.getElementById("endGallons").value) || 0;
+      document.getElementById("gallonsUsed").value = end - start >= 0 ? end - start : 0;
     }
-    form.startGallons.addEventListener('input', calculateGallonsUsed);
-    form.endGallons.addEventListener('input', calculateGallonsUsed);
 
-    // Submit to Google Apps Script Web App
+    document.getElementById("startGallons").addEventListener("input", calculateGallonsUsed);
+    document.getElementById("endGallons").addEventListener("input", calculateGallonsUsed);
+
+    // Handle form submit
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
       const data = {
-        vin: form.vin.value.trim(),
-        startGallons: form.startGallons.value,
-        endGallons: form.endGallons.value,
-        gallonsUsed: form.gallonsUsed.value,
-        date: form.date.value,
-        initials: form.initials.value.trim().toUpperCase()
+        vin: document.getElementById("vin").value.trim(),
+        startGallons: document.getElementById("startGallons").value,
+        endGallons: document.getElementById("endGallons").value,
+        gallonsUsed: document.getElementById("gallonsUsed").value,
+        date: document.getElementById("date").value,
+        initials: document.getElementById("initials").value.trim().toUpperCase()
       };
 
       try {
         await fetch("https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec", {
           method: "POST",
-          mode: "no-cors", // required for anonymous web app posts
+          mode: "no-cors",
           headers: {
             "Content-Type": "application/json"
           },
@@ -110,7 +111,7 @@
 
         successMessage.textContent = "Fuel slip submitted!";
         form.reset();
-        form.date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+        document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
       } catch (error) {
         successMessage.textContent = "Submission failed. Please try again.";
         console.error("Submit error:", error);
