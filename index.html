@@ -2,120 +2,121 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Midway Ford Fuel Slip</title>
   <style>
+    :root {
+      color-scheme: light dark;
+    }
     body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
+      font-family: system-ui, sans-serif;
+      padding: 1.5rem;
       max-width: 600px;
       margin: auto;
-      background-color: #f4f4f4;
+      background: #f2f2f2;
+      color: #333;
     }
     h1 {
       text-align: center;
-      color: #333;
+      font-size: 1.8rem;
+      margin-bottom: 1.2rem;
+    }
+    form {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1.2rem;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
     }
     label {
       display: block;
-      margin-top: 15px;
-      font-weight: bold;
+      margin: 0.8rem 0 0.2rem;
+      font-weight: 600;
     }
-    input, button {
+    input {
       width: 100%;
-      padding: 10px;
-      margin-top: 5px;
+      padding: 0.6rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
       box-sizing: border-box;
     }
     button {
+      margin-top: 1.2rem;
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 1.1rem;
       background-color: #007bff;
       color: white;
       border: none;
+      border-radius: 6px;
       cursor: pointer;
+      font-weight: 600;
     }
-    .success {
-      color: green;
-      margin-top: 15px;
-      text-align: center;
-      font-weight: bold;
+    button:hover {
+      background-color: #0056b3;
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background-color: #121212;
+        color: #eee;
+      }
+      form {
+        background: #1f1f1f;
+        border: 1px solid #333;
+      }
+      input {
+        background: #2a2a2a;
+        color: white;
+        border: 1px solid #444;
+      }
+      button {
+        background-color: #3399ff;
+      }
     }
   </style>
 </head>
 <body>
-
   <h1>Midway Ford Fuel Slip</h1>
 
-  <form id="fuelForm">
+  <form action="https://script.google.com/macros/s/AKfycbwuBC8URjZqk2ManosVAUbpUctuRZxyk2veW6G78szhiWRHL-EUAZzS_TnyiiHiVEg/exec" method="POST">
     <label for="vin">VIN (Last 8 Characters):</label>
-    <input type="text" id="vin" name="vin" maxlength="8" required />
+    <input type="text" name="vin" id="vin" maxlength="8" required />
 
     <label for="startGallons">Start Gallons:</label>
-    <input type="number" id="startGallons" name="startGallons" required />
+    <input type="number" name="startGallons" id="startGallons" required />
 
     <label for="endGallons">End Gallons:</label>
-    <input type="number" id="endGallons" name="endGallons" required />
+    <input type="number" name="endGallons" id="endGallons" required />
 
     <label for="gallonsUsed">Gallons Used:</label>
-    <input type="number" id="gallonsUsed" name="gallonsUsed" readonly />
+    <input type="number" name="gallonsUsed" id="gallonsUsed" readonly />
 
     <label for="date">Date:</label>
-    <input type="text" id="date" name="date" readonly />
+    <input type="text" name="date" id="date" readonly />
 
     <label for="initials">Initials:</label>
-    <input type="text" id="initials" name="initials" maxlength="4" required />
+    <input type="text" name="initials" id="initials" maxlength="4" required />
 
     <button type="submit">Submit</button>
   </form>
 
-  <div class="success" id="successMessage"></div>
-
   <script>
-    const form = document.getElementById("fuelForm");
-    const successMessage = document.getElementById("successMessage");
+    const start = document.getElementById("startGallons");
+    const end = document.getElementById("endGallons");
+    const used = document.getElementById("gallonsUsed");
+    const date = document.getElementById("date");
 
-    // Set date to today's date in CST
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
-    document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+    date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-    // Calculate gallons used
-    function calculateGallonsUsed() {
-      const start = parseFloat(document.getElementById("startGallons").value) || 0;
-      const end = parseFloat(document.getElementById("endGallons").value) || 0;
-      document.getElementById("gallonsUsed").value = end - start >= 0 ? (end - start).toFixed(2) : 0;
+    function calc() {
+      const s = parseFloat(start.value) || 0;
+      const e = parseFloat(end.value) || 0;
+      used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
     }
 
-    document.getElementById("startGallons").addEventListener("input", calculateGallonsUsed);
-    document.getElementById("endGallons").addEventListener("input", calculateGallonsUsed);
-
-    // Submit form
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  const params = new URLSearchParams();
-  params.append("vin", document.getElementById("vin").value.trim());
-  params.append("startGallons", document.getElementById("startGallons").value);
-  params.append("endGallons", document.getElementById("endGallons").value);
-  params.append("gallonsUsed", document.getElementById("gallonsUsed").value);
-  params.append("date", document.getElementById("date").value);
-  params.append("initials", document.getElementById("initials").value.trim().toUpperCase());
-
-  try {
-    await fetch("https://script.google.com/macros/s/AKfycbwuBC8URjZqk2ManosVAUbpUctuRZxyk2veW6G78szhiWRHL-EUAZzS_TnyiiHiVEg/exec", {
-      method: "POST",
-      mode: "no-cors",
-      body: params
-    });
-
-    successMessage.textContent = "Fuel slip submitted!";
-    form.reset();
-    document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
-  } catch (err) {
-    console.error("Submit error:", err);
-    successMessage.textContent = "Submission failed.";
-  }
-});
-
+    start.addEventListener("input", calc);
+    end.addEventListener("input", calc);
   </script>
-
 </body>
 </html>
