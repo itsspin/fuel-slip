@@ -5,18 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Midway Ford Fuel Slip</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-    h1 { text-align: center; color: #1a1a1a; }
-    label { display: block; margin-top: 15px; }
-    input, button { width: 100%; padding: 10px; margin-top: 5px; }
-    button { background-color: #2e6da4; color: white; border: none; }
-    .success { color: green; margin-top: 10px; text-align: center; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .success {
+      color: green;
+      margin-top: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
   <h1>Midway Ford Fuel Slip</h1>
   <form id="fuelForm">
-    <label for="vin">VIN (Last 8):</label>
+    <label for="vin">VIN (Last 8 Characters):</label>
     <input type="text" id="vin" name="vin" maxlength="8" required />
 
     <label for="startGallons">Start Gallons:</label>
@@ -36,27 +64,24 @@
 
     <button type="submit">Submit</button>
   </form>
-
   <div class="success" id="successMessage"></div>
 
   <script>
     const form = document.getElementById("fuelForm");
     const successMessage = document.getElementById("successMessage");
 
-    // Set today's date in CST
-    const dateField = document.getElementById("date");
+    // Auto-fill today's date (CST)
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
-    dateField.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+    document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-    // Auto-calculate gallons used
-    function updateGallonsUsed() {
+    // Calculate gallons used
+    function calculateGallonsUsed() {
       const start = parseFloat(form.startGallons.value) || 0;
       const end = parseFloat(form.endGallons.value) || 0;
-      const used = end - start;
-      form.gallonsUsed.value = used >= 0 ? used : 0;
+      form.gallonsUsed.value = end - start >= 0 ? end - start : 0;
     }
-    form.startGallons.addEventListener("input", updateGallonsUsed);
-    form.endGallons.addEventListener("input", updateGallonsUsed);
+    form.startGallons.addEventListener('input', calculateGallonsUsed);
+    form.endGallons.addEventListener('input', calculateGallonsUsed);
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -73,18 +98,19 @@
       try {
         await fetch("https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec", {
           method: "POST",
-          mode: "no-cors", // Don't expect a response
+          mode: "no-cors", // allows anonymous submission to GAS
           headers: {
             "Content-Type": "application/json"
           },
           body: JSON.stringify(data)
         });
+
         successMessage.textContent = "Fuel slip submitted!";
         form.reset();
-        dateField.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+        form.date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
       } catch (error) {
-        console.error(error);
         successMessage.textContent = "Submission failed. Please try again.";
+        console.error("Submit Error:", error);
       }
     });
   </script>
