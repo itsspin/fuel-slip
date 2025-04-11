@@ -97,8 +97,178 @@
   <button type="submit">Submit</button>
 </form>
 
-<!-- Additional confirmation and final output omitted for brevity -->
+<div id="confirmationPage" class="card">
+  <h2>Confirm Your Entry</h2>
+  <p><strong>VIN:</strong> <span id="conf-vin"></span></p>
+  <p><strong>Start Gallons:</strong> <span id="conf-start"></span></p>
+  <p><strong>End Gallons:</strong> <span id="conf-end"></span></p>
+  <p><strong>Gallons Used:</strong> <span id="conf-used"></span></p>
+  <p><strong>Date:</strong> <span id="conf-date"></span></p>
+  <p><strong>Initials:</strong> <span id="conf-user"></span></p>
+  <button id="confirmSubmit">Confirm & Submit</button>
+  <button onclick="goBack()">Go Back</button>
+</div>
+
+<div id="finalConfirmation" class="card">
+  <h2>Fuel Slip Submitted</h2>
+  <p><strong>VIN:</strong> <span id="c-vin"></span></p>
+  <p><strong>Start Gallons:</strong> <span id="c-start"></span></p>
+  <p><strong>End Gallons:</strong> <span id="c-end"></span></p>
+  <p><strong>Gallons Used:</strong> <span id="c-used"></span></p>
+  <p><strong>Date:</strong> <span id="c-date"></span></p>
+  <p><strong>Initials:</strong> <span id="c-user"></span></p>
+  <button onclick="window.print()">Print This Slip</button>
+  <button onclick="resetForm()">Submit Another</button>
+</div>
+
 <script src="https://unpkg.com/@ericblade/quagga2@1.2.6/dist/quagga.min.js"></script>
-<!-- Full script would go here -->
+<script>
+  const loginScreen = document.getElementById("loginScreen");
+  const fuelForm = document.getElementById("fuelForm");
+  const confirmationPage = document.getElementById("confirmationPage");
+  const finalConfirmation = document.getElementById("finalConfirmation");
+
+  const vin = document.getElementById("vin");
+  const start = document.getElementById("startGallons");
+  const end = document.getElementById("endGallons");
+  const used = document.getElementById("gallonsUsed");
+  const date = document.getElementById("date");
+  const initials = document.getElementById("initials");
+
+  const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
+  date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+
+  const confVin = document.getElementById("conf-vin");
+  const confStart = document.getElementById("conf-start");
+  const confEnd = document.getElementById("conf-end");
+  const confUsed = document.getElementById("conf-used");
+  const confDate = document.getElementById("conf-date");
+  const confUser = document.getElementById("conf-user");
+
+  const cVin = document.getElementById("c-vin");
+  const cStart = document.getElementById("c-start");
+  const cEnd = document.getElementById("c-end");
+  const cUsed = document.getElementById("c-used");
+  const cDate = document.getElementById("c-date");
+  const cUser = document.getElementById("c-user");
+
+  if (localStorage.getItem("fuelLogin") === "yes") {
+    loginScreen.classList.remove("visible");
+    fuelForm.classList.add("visible");
+  }
+
+  function checkLogin() {
+    const pass = document.getElementById("loginPass").value;
+    if (pass === "midway123") {
+      localStorage.setItem("fuelLogin", "yes");
+      loginScreen.classList.remove("visible");
+      fuelForm.classList.add("visible");
+    } else {
+      alert("Incorrect password.");
+    }
+  }
+
+  function calc() {
+    const s = parseFloat(start.value) || 0;
+    const e = parseFloat(end.value) || 0;
+    used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
+  }
+
+  start.addEventListener("input", calc);
+  end.addEventListener("input", calc);
+
+  fuelForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    confVin.textContent = vin.value.toUpperCase();
+    confStart.textContent = start.value;
+    confEnd.textContent = end.value;
+    confUsed.textContent = used.value;
+    confDate.textContent = date.value;
+    confUser.textContent = initials.value.toUpperCase();
+    fuelForm.classList.remove("visible");
+    confirmationPage.classList.add("visible");
+  });
+
+  document.getElementById("confirmSubmit").addEventListener("click", async () => {
+    const data = new URLSearchParams();
+    data.append("vin", vin.value.trim().toUpperCase());
+    data.append("startGallons", start.value);
+    data.append("endGallons", end.value);
+    data.append("gallonsUsed", used.value);
+    data.append("date", date.value);
+    data.append("initials", initials.value.trim().toUpperCase());
+
+    await fetch("https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec", {
+      method: "POST",
+      mode: "no-cors",
+      body: data
+    });
+
+    cVin.textContent = vin.value.toUpperCase();
+    cStart.textContent = start.value;
+    cEnd.textContent = end.value;
+    cUsed.textContent = used.value;
+    cDate.textContent = date.value;
+    cUser.textContent = initials.value.toUpperCase();
+
+    confirmationPage.classList.remove("visible");
+    finalConfirmation.classList.add("visible");
+  });
+
+  function goBack() {
+    confirmationPage.classList.remove("visible");
+    fuelForm.classList.add("visible");
+  }
+
+  function resetForm() {
+    fuelForm.reset();
+    date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+    finalConfirmation.classList.remove("visible");
+    fuelForm.classList.add("visible");
+  }
+
+  document.getElementById("scanBtn").addEventListener("click", () => {
+    const video = document.getElementById("scanner");
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Camera access is not supported.");
+      return;
+    }
+
+    video.style.display = "block";
+
+    if (Quagga.initialized) Quagga.stop();
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: video,
+        constraints: { facingMode: "environment" }
+      },
+      decoder: {
+        readers: ["code_128_reader", "code_39_reader", "pdf417_reader"]
+      },
+      locate: true
+    }, function(err) {
+      if (err) {
+        console.error(err);
+        alert("Camera init failed. Make sure you're on HTTPS and allowed access.");
+        video.style.display = "none";
+        return;
+      }
+      Quagga.initialized = true;
+      Quagga.start();
+    });
+
+    Quagga.onDetected(function(result) {
+      const code = result.codeResult.code;
+      if (code.length >= 8) {
+        vin.value = code.slice(-8).toUpperCase();
+        Quagga.stop();
+        video.style.display = "none";
+      }
+    });
+  });
+</script>
 </body>
 </html>
