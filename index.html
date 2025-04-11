@@ -1,4 +1,230 @@
 <!DOCTYPE html>
-<html lang="="en">
-<!-- OMITTED HERE FOR BREVITY — CONTENT IDENTICAL TO LAST POST -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Midway Ford Fuel Slip Login</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    h1, h2 { text-align: center; }
+    input, button { width: 100%; padding: 10px; margin: 10px 0; }
+    .hidden { display: none; }
+    #scanner-overlay, #confirmation-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.8);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+    }
+    #scanner-container, #confirmation-box {
+      background: #fff;
+      color: black;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    #close-scan, #cancel-confirm {
+      position: absolute;
+      top: 10px; right: 10px;
+      background: red;
+      color: white;
+      border: none;
+      font-size: 20px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #successMessage {
+      background: #d4edda;
+      color: #155724;
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+  </style>
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <div id="login-page">
+    <h1>Login</h1>
+    <input type="text" id="login-user" placeholder="Username" required onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus();" />
+    <input type="password" id="login-pass" placeholder="4-digit PIN" required pattern="\d{4}" onkeydown="if(event.key==='Enter') handleLogin();" />
+    <button onclick="handleLogin()">Login</button>
+  </div>
+
+  <div id="form-page" class="hidden">
+    <h2>Midway Ford Fuel Slip</h2>
+    <form id="fuelForm">
+      <label for="vin">VIN (last 8 ok):</label>
+      <input type="text" id="vin" name="vin" required minlength="8" maxlength="17" />
+      <button type="button" onclick="startScanner()">Scan VIN</button>
+
+      <label for="start-gallons">Start Gallons:</label>
+      <input type="number" id="start-gallons" name="start_gallons" required step="0.01" />
+
+      <label for="end-gallons">End Gallons:</label>
+      <input type="number" id="end-gallons" name="end_gallons" required step="0.01" />
+
+      <label>Date:</label>
+      <input type="text" id="date" name="date" readonly />
+
+      <label>User:</label>
+      <input type="text" id="username" name="user" readonly />
+
+      <button type="submit" id="submit-btn">Submit</button>
+    </form>
+    <div id="successMessage"></div>
+  </div>
+
+  <div id="scanner-overlay">
+    <button id="close-scan" onclick="stopScanner()">X</button>
+    <div id="scanner-container"></div>
+  </div>
+
+  <div id="confirmation-overlay">
+    <button id="cancel-confirm" onclick="hideConfirmation()">X</button>
+    <div id="confirmation-box">
+      <p><strong>Confirm Your Entry:</strong></p>
+      <p id="confirm-vin"></p>
+      <p id="confirm-start-gallons"></p>
+      <p id="confirm-end-gallons"></p>
+      <p id="confirm-date"></p>
+      <p id="confirm-user"></p>
+      <button onclick="finalSubmit()">Confirm and Submit</button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <script>
+    const scriptURL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID_HERE/exec"; // Replace this
+    let currentUser = "";
+    let formData = {};
+
+    function handleLogin() {
+      const user = document.getElementById("login-user").value.trim();
+      const pass = document.getElementById("login-pass").value.trim();
+
+      if (!user || !/^\d{4}$/.test(pass)) {
+        alert("Please enter a valid username and 4-digit PIN.");
+        return;
+      }
+
+      fetch(scriptURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "validateUser", username: user, password: pass })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          currentUser = user;
+          document.getElementById("username").value = currentUser;
+          document.getElementById("login-page").classList.add("hidden");
+          document.getElementById("form-page").classList.remove("hidden");
+          const today = new Date().toISOString().split('T')[0];
+          document.getElementById("date").value = today;
+        } else {
+          alert("Invalid credentials. Please try again.");
+        }
+      })
+      .catch(err => alert("Error connecting to login system: " + err));
+    }
+
+    function startScanner() {
+      Quagga.stop();
+      Quagga.offDetected();
+      document.getElementById("scanner-overlay").style.display = "flex";
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: document.getElementById("scanner-container"),
+          constraints: { width: { min: 640 }, height: { min: 480 }, facingMode: "environment" }
+        },
+        decoder: { readers: ["code_39_reader", "code_128_reader", "code_39_vin_reader", "ean_reader", "upc_reader"] }
+      }, err => {
+        if (err) { alert("Scanner error"); return; }
+        Quagga.start();
+      });
+      Quagga.onDetected(data => {
+        const code = data.codeResult.code;
+        if (code.length >= 8) {
+          document.getElementById("vin").value = code.slice(-8);
+          stopScanner();
+        }
+      });
+    }
+
+    function stopScanner() {
+      Quagga.stop();
+      Quagga.offDetected();
+      document.getElementById("scanner-overlay").style.display = "none";
+      document.getElementById("scanner-container").innerHTML = "";
+    }
+
+    document.getElementById("fuelForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const startGallons = parseFloat(document.getElementById("start-gallons").value);
+      const endGallons = parseFloat(document.getElementById("end-gallons").value);
+
+      if (startGallons >= endGallons) {
+        alert("Start Gallons must be less than End Gallons.");
+        return;
+      }
+
+      const usedGallons = endGallons - startGallons;
+
+      formData = {
+        action: "submitFuelSlip",
+        vin: document.getElementById("vin").value,
+        start_gallons: startGallons,
+        end_gallons: endGallons,
+        used_gallons: usedGallons,
+        date: document.getElementById("date").value,
+        user: currentUser
+      };
+
+      document.getElementById("confirm-vin").textContent = "VIN: " + formData.vin;
+      document.getElementById("confirm-start-gallons").textContent = "Start Gallons: " + formData.start_gallons;
+      document.getElementById("confirm-end-gallons").textContent = "End Gallons: " + formData.end_gallons + " (Used: " + formData.used_gallons + ")";
+      document.getElementById("confirm-date").textContent = "Date: " + formData.date;
+      document.getElementById("confirm-user").textContent = "User: " + formData.user;
+
+      document.getElementById("confirmation-overlay").style.display = "flex";
+    });
+
+    function hideConfirmation() {
+      document.getElementById("confirmation-overlay").style.display = "none";
+    }
+
+    async function finalSubmit() {
+      hideConfirmation();
+      try {
+        const response = await fetch(scriptURL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData)
+        });
+        const result = await response.json();
+        if (result.success) {
+          document.getElementById("successMessage").textContent = "Fuel slip submitted!";
+        } else {
+          document.getElementById("successMessage").textContent = "Submission failed: " + (result.message || "Unknown error.");
+        }
+        document.getElementById("successMessage").style.display = "block";
+        document.getElementById("fuelForm").reset();
+        document.getElementById("username").value = currentUser;
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById("date").value = today;
+      } catch (err) {
+        document.getElementById("successMessage").textContent = "Submission error: " + err;
+        document.getElementById("successMessage").style.display = "block";
+      }
+    }
+  </script>
+</body>
 </html>
