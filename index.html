@@ -55,8 +55,8 @@
     <label for="initials">Your Initials:</label>
     <input type="text" id="initials" name="initials" required pattern="[A-Z]{2,4}" title="2-4 uppercase letters" />
 
-    <label for="vin">VIN (last 8 ok):</label>
-    <input type="text" id="vin" name="vin" required minlength="8" maxlength="17" />
+    <label for="vin">VIN (last 8 characters):</label>
+    <input type="text" id="vin" name="vin" required minlength="8" maxlength="8" />
 
     <label for="start-gallons">Start Gallons:</label>
     <input type="number" id="start-gallons" name="start_gallons" required step="0.01" />
@@ -98,6 +98,12 @@
       const endGallons = parseFloat(document.getElementById("end-gallons").value);
       const today = new Date();
       const formattedDate = today.toLocaleDateString("en-US");
+
+      // Validate VIN to be exactly 8 characters
+      if (vin.length !== 8) {
+        alert("VIN should be exactly 8 characters.");
+        return;
+      }
 
       if (!/^[A-Z]{2,4}$/.test(initials)) {
         alert("Initials must be 2–4 uppercase letters.");
