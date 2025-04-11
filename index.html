@@ -10,7 +10,7 @@
       padding: 20px;
       max-width: 600px;
       margin: auto;
-      background-color: #f7f7f7;
+      background-color: #f4f4f4;
     }
     h1 {
       text-align: center;
@@ -36,20 +36,8 @@
     button:hover {
       background-color: #0056b3;
     }
-    #scanner-container {
-      display: none;
-      margin-top: 10px;
-      border: 2px dashed #ccc;
-      height: 250px;
-    }
     .success {
       color: green;
-      margin-top: 15px;
-      text-align: center;
-      font-weight: bold;
-    }
-    .error {
-      color: red;
       margin-top: 15px;
       text-align: center;
       font-weight: bold;
@@ -58,14 +46,12 @@
 </head>
 <body>
   <h1>Midway Ford Fuel Slip</h1>
+
   <form id="fuelForm">
     <label for="vin">VIN (Last 8 Characters):</label>
     <input type="text" id="vin" name="vin" maxlength="8" required />
 
     <button type="button" onclick="startScanner()">Scan VIN</button>
-    <div id="scanner-container">
-      <!-- Scanner integration can go here -->
-    </div>
 
     <label for="startGallons">Start Gallons:</label>
     <input type="number" id="startGallons" name="startGallons" required />
@@ -88,17 +74,14 @@
   </form>
 
   <div class="success" id="successMessage"></div>
-  <div class="error" id="errorMessage"></div>
 
   <script>
+    // Format today's date in CST
     const dateField = document.getElementById('date');
-    const now = new Date();
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
-    dateField.value = new Intl.DateTimeFormat('en-US', options).format(now);
+    dateField.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-    document.getElementById('startGallons').addEventListener('input', calculateGallonsUsed);
-    document.getElementById('endGallons').addEventListener('input', calculateGallonsUsed);
-
+    // Calculate Gallons Used
     function calculateGallonsUsed() {
       const start = parseFloat(document.getElementById('startGallons').value) || 0;
       const end = parseFloat(document.getElementById('endGallons').value) || 0;
@@ -106,20 +89,22 @@
       document.getElementById('gallonsUsed').value = used >= 0 ? used : 0;
     }
 
-    // Fetch IP address
+    document.getElementById('startGallons').addEventListener('input', calculateGallonsUsed);
+    document.getElementById('endGallons').addEventListener('input', calculateGallonsUsed);
+
+    // Fetch public IP
     fetch('https://api.ipify.org?format=json')
-      .then(response => response.json())
+      .then(res => res.json())
       .then(data => {
         document.getElementById('ip').value = data.ip;
       })
-      .catch(error => {
-        console.error('IP fetch error:', error);
+      .catch(err => {
+        console.error('Could not get IP:', err);
       });
 
+    // Submit form to Apps Script Web App
     document.getElementById('fuelForm').addEventListener('submit', function(e) {
       e.preventDefault();
-      document.getElementById('successMessage').textContent = '';
-      document.getElementById('errorMessage').textContent = '';
 
       const formData = {
         vin: document.getElementById('vin').value.trim(),
@@ -138,27 +123,25 @@
         },
         body: JSON.stringify(formData)
       })
-      .then(res => res.json())
-      .then(response => {
-        if (response.result === 'success') {
-          document.getElementById('successMessage').textContent = 'Submission successful!';
+      .then(res => res.text())
+      .then(result => {
+        if (result === "Success" || result.toLowerCase().includes("success")) {
+          document.getElementById('successMessage').textContent = "Submission successful!";
           document.getElementById('fuelForm').reset();
           dateField.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
         } else {
-          document.getElementById('errorMessage').textContent = 'Submission failed. Please try again.';
+          document.getElementById('successMessage').textContent = "Submission failed.";
         }
       })
       .catch(error => {
-        console.error('Submission error:', error);
-        document.getElementById('errorMessage').textContent = 'Error sending data. Check connection.';
+        console.error('Error submitting form:', error);
+        document.getElementById('successMessage').textContent = "An error occurred.";
       });
     });
 
+    // Stub for VIN scanner
     function startScanner() {
-      alert('Scanner functionality not implemented. Enter full VIN and use last 8.');
-      // In production, integrate a barcode scanner and extract last 8:
-      // const fullVin = "1HGCM82633A123456";
-      // document.getElementById('vin').value = fullVin.slice(-8);
+      alert("VIN scanning not implemented. Manually enter last 8 characters.");
     }
   </script>
 </body>
