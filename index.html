@@ -62,6 +62,10 @@
       margin-top: 1rem;
     }
   </style>
+<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+<script>
+  emailjs.init("c7_t3EOBwGHFIPCKm");
+</script>
 </head>
 <body>
 <h1>Midway Ford Fuel Slip</h1>
@@ -212,11 +216,37 @@
     cUser.textContent = initials.value.toUpperCase();
 
     confirmationPage.classList.remove("visible");
+    // Send Email via EmailJS
+    emailjs.send("service_jbw2q2o", "template_azb4var", {
+      vin: vin.value.trim().toUpperCase(),
+      startGallons: start.value,
+      endGallons: end.value,
+      gallonsUsed: used.value,
+      date: date.value,
+      initials: initials.value.trim().toUpperCase()
+    }).then(() => {
+      console.log("Email sent successfully");
+    }, (error) => {
+      console.error("EmailJS error:", error);
+    });
     finalConfirmation.classList.add("visible");
   });
 
   function goBack() {
     confirmationPage.classList.remove("visible");
+    // Send Email via EmailJS
+    emailjs.send("service_jbw2q2o", "template_azb4var", {
+      vin: vin.value.trim().toUpperCase(),
+      startGallons: start.value,
+      endGallons: end.value,
+      gallonsUsed: used.value,
+      date: date.value,
+      initials: initials.value.trim().toUpperCase()
+    }).then(() => {
+      console.log("Email sent successfully");
+    }, (error) => {
+      console.error("EmailJS error:", error);
+    });
     fuelForm.classList.add("visible");
   }
 
