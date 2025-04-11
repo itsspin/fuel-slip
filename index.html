@@ -100,7 +100,7 @@ form.addEventListener("submit", async (e) => {
   params.append("initials", document.getElementById("initials").value.trim().toUpperCase());
 
   try {
-    await fetch("https://script.google.com/macros/s/YOUR_DEPLOYED_WEBAPP_ID/exec", {
+    await fetch("https://script.google.com/macros/s/AKfycbwuBC8URjZqk2ManosVAUbpUctuRZxyk2veW6G78szhiWRHL-EUAZzS_TnyiiHiVEg/exec", {
       method: "POST",
       mode: "no-cors",
       body: params
