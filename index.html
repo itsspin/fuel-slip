@@ -1,13 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Midway Ford Fuel Slip</title>
   <style>
-    :root {
-      color-scheme: light dark;
-    }
     body {
       font-family: system-ui, sans-serif;
       padding: 1.5rem;
@@ -32,7 +29,7 @@
       margin: 0.8rem 0 0.2rem;
       font-weight: 600;
     }
-    input {
+    input, button {
       width: 100%;
       padding: 0.6rem;
       font-size: 1rem;
@@ -41,37 +38,20 @@
       box-sizing: border-box;
     }
     button {
-      margin-top: 1.2rem;
-      width: 100%;
-      padding: 0.75rem;
-      font-size: 1.1rem;
       background-color: #007bff;
       color: white;
       border: none;
-      border-radius: 6px;
+      margin-top: 1rem;
       cursor: pointer;
-      font-weight: 600;
+      font-weight: bold;
     }
     button:hover {
       background-color: #0056b3;
     }
-    @media (prefers-color-scheme: dark) {
-      body {
-        background-color: #121212;
-        color: #eee;
-      }
-      form {
-        background: #1f1f1f;
-        border: 1px solid #333;
-      }
-      input {
-        background: #2a2a2a;
-        color: white;
-        border: 1px solid #444;
-      }
-      button {
-        background-color: #3399ff;
-      }
+    #scanner {
+      display: none;
+      width: 100%;
+      margin-top: 1rem;
     }
   </style>
 </head>
@@ -81,6 +61,8 @@
   <form action="https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec" method="POST">
     <label for="vin">VIN (Last 8 Characters):</label>
     <input type="text" name="vin" id="vin" maxlength="8" required />
+    <button type="button" id="scanBtn">Scan VIN Barcode</button>
+    <video id="scanner"></video>
 
     <label for="startGallons">Start Gallons:</label>
     <input type="number" name="startGallons" id="startGallons" required />
@@ -100,23 +82,64 @@
     <button type="submit">Submit</button>
   </form>
 
+  <script src="https://unpkg.com/@ericblade/quagga2@1.2.6/dist/quagga.min.js"></script>
   <script>
+    const vin = document.getElementById("vin");
     const start = document.getElementById("startGallons");
     const end = document.getElementById("endGallons");
     const used = document.getElementById("gallonsUsed");
     const date = document.getElementById("date");
+    const scanBtn = document.getElementById("scanBtn");
+    const video = document.getElementById("scanner");
 
+    // Auto-fill CST date
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
     date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
+    // Calculate gallons used
     function calc() {
       const s = parseFloat(start.value) || 0;
       const e = parseFloat(end.value) || 0;
       used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
     }
-
     start.addEventListener("input", calc);
     end.addEventListener("input", calc);
+
+    // VIN Barcode Scanner (QuaggaJS)
+    scanBtn.addEventListener("click", () => {
+      video.style.display = "block";
+      Quagga.init({
+        inputStream: {
+          type: "LiveStream",
+          target: video,
+          constraints: {
+            facingMode: "environment"
+          }
+        },
+        decoder: {
+          readers: ["code_128_reader", "code_39_reader", "pdf417_reader"]
+        }
+      }, function(err) {
+        if (err) {
+          console.error(err);
+          alert("Scanner error.");
+          return;
+        }
+        Quagga.start();
+      });
+
+      Quagga.onDetected(function(result) {
+        const code = result.codeResult.code;
+        if (code.length >= 8) {
+          vin.value = code.slice(-8);
+          Quagga.stop();
+          video.style.display = "none";
+        }
+      });
+    });
+
+    // Auto-focus VIN on load
+    window.onload = () => vin.focus();
   </script>
 </body>
 </html>
