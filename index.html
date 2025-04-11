@@ -10,7 +10,7 @@
       padding: 20px;
       max-width: 600px;
       margin: auto;
-      background-color: #f9f9f9;
+      background-color: #f4f4f4;
     }
     h1 {
       text-align: center;
@@ -43,6 +43,7 @@
 </head>
 <body>
   <h1>Midway Ford Fuel Slip</h1>
+
   <form id="fuelForm">
     <label for="vin">VIN (Last 8 Characters):</label>
     <input type="text" id="vin" name="vin" maxlength="8" required />
@@ -64,17 +65,18 @@
 
     <button type="submit">Submit</button>
   </form>
+
   <div class="success" id="successMessage"></div>
 
   <script>
     const form = document.getElementById("fuelForm");
     const successMessage = document.getElementById("successMessage");
 
-    // Auto-fill today's date (CST)
+    // Set current date in CST
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
     document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-    // Calculate gallons used
+    // Calculate gallons used live
     function calculateGallonsUsed() {
       const start = parseFloat(form.startGallons.value) || 0;
       const end = parseFloat(form.endGallons.value) || 0;
@@ -83,6 +85,7 @@
     form.startGallons.addEventListener('input', calculateGallonsUsed);
     form.endGallons.addEventListener('input', calculateGallonsUsed);
 
+    // Submit to Google Apps Script Web App
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -98,7 +101,7 @@
       try {
         await fetch("https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec", {
           method: "POST",
-          mode: "no-cors", // allows anonymous submission to GAS
+          mode: "no-cors", // required for anonymous web app posts
           headers: {
             "Content-Type": "application/json"
           },
@@ -110,7 +113,7 @@
         form.date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
       } catch (error) {
         successMessage.textContent = "Submission failed. Please try again.";
-        console.error("Submit Error:", error);
+        console.error("Submit error:", error);
       }
     });
   </script>
