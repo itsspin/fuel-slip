@@ -74,9 +74,10 @@
 
     // Set current date in CST
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
-    document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+    const now = new Date();
+    document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(now);
 
-    // Live calculation of gallons used
+    // Calculate gallons used
     function calculateGallonsUsed() {
       const start = parseFloat(document.getElementById("startGallons").value) || 0;
       const end = parseFloat(document.getElementById("endGallons").value) || 0;
@@ -86,7 +87,6 @@
     document.getElementById("startGallons").addEventListener("input", calculateGallonsUsed);
     document.getElementById("endGallons").addEventListener("input", calculateGallonsUsed);
 
-    // Handle form submit
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -98,6 +98,9 @@
         date: document.getElementById("date").value,
         initials: document.getElementById("initials").value.trim().toUpperCase()
       };
+
+      // Log to console for debugging
+      console.log("Submitting:", data);
 
       try {
         await fetch("https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec", {
@@ -113,8 +116,8 @@
         form.reset();
         document.getElementById("date").value = new Intl.DateTimeFormat('en-US', options).format(new Date());
       } catch (error) {
-        successMessage.textContent = "Submission failed. Please try again.";
         console.error("Submit error:", error);
+        successMessage.textContent = "Submission failed.";
       }
     });
   </script>
