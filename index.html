@@ -8,7 +8,6 @@
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
     h2 { text-align: center; }
     input, button { width: 100%; padding: 10px; margin: 10px 0; }
-    .hidden { display: none; }
     #confirmation-overlay {
       display: none;
       position: fixed;
@@ -98,7 +97,7 @@
       const startGallons = parseFloat(document.getElementById("start-gallons").value);
       const endGallons = parseFloat(document.getElementById("end-gallons").value);
       const today = new Date();
-      const formattedDate = today.toLocaleDateString("en-US"); // MM/DD/YYYY
+      const formattedDate = today.toLocaleDateString("en-US");
 
       if (!/^[A-Z]{2,4}$/.test(initials)) {
         alert("Initials must be 2–4 uppercase letters.");
