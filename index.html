@@ -69,7 +69,7 @@
     <label for="vin">VIN (Last 8 Characters):</label>
     <input type="text" name="vin" id="vin" maxlength="8" required />
     <button type="button" id="scanBtn">Scan VIN Barcode</button>
-    <video id="scanner"></video>
+    <video id="scanner" autoplay muted playsinline></video>
 
     <label for="startGallons">Start Gallons:</label>
     <input type="number" name="startGallons" id="startGallons" step="0.1" required />
@@ -130,7 +130,6 @@
     start.addEventListener("input", calc);
     end.addEventListener("input", calc);
 
-    // Submit form to Apps Script
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -159,37 +158,46 @@
       successBox.style.display = "block";
     });
 
-    // VIN Scanner for Android/iOS
+    // VIN Scanner
     document.getElementById("scanBtn").addEventListener("click", () => {
       const video = document.getElementById("scanner");
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Camera access not supported on this device.");
+        alert("Camera access is not supported on this device.");
         return;
       }
 
       video.style.display = "block";
 
+      if (Quagga.initialized) {
+        Quagga.stop();
+      }
+
       Quagga.init({
         inputStream: {
+          name: "Live",
           type: "LiveStream",
           target: video,
           constraints: {
             facingMode: { ideal: "environment" },
-            aspectRatio: { min: 1, max: 2 }
+            width: { min: 640 },
+            height: { min: 480 },
           }
         },
         decoder: {
           readers: ["code_128_reader", "code_39_reader", "pdf417_reader"]
         },
-        locate: true
+        locate: true,
+        numOfWorkers: navigator.hardwareConcurrency || 2
       }, function (err) {
         if (err) {
-          console.error("Scanner error:", err);
-          alert("Unable to access camera. Make sure you allowed camera permissions and are using HTTPS.");
+          console.error("Quagga init error:", err);
+          alert("Unable to access camera. Be sure you're using HTTPS and allowed camera access.");
           video.style.display = "none";
           return;
         }
+
+        Quagga.initialized = true;
         Quagga.start();
       });
 
