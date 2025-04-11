@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="="en">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -18,7 +18,7 @@
       font-size: 1.8rem;
       margin-bottom: 1.2rem;
     }
-    form {
+    form, #confirmation {
       background: #fff;
       border-radius: 10px;
       padding: 1.2rem;
@@ -53,12 +53,16 @@
       width: 100%;
       margin-top: 1rem;
     }
+    #confirmation {
+      display: none;
+      margin-top: 2rem;
+    }
   </style>
 </head>
 <body>
   <h1>Midway Ford Fuel Slip</h1>
 
-  <form action="https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec" method="POST">
+  <form id="fuelForm">
     <label for="vin">VIN (Last 8 Characters):</label>
     <input type="text" name="vin" id="vin" maxlength="8" required />
     <button type="button" id="scanBtn">Scan VIN Barcode</button>
@@ -82,6 +86,18 @@
     <button type="submit">Submit</button>
   </form>
 
+  <!-- Confirmation Slip -->
+  <div id="confirmation">
+    <h2>Fuel Slip Submitted</h2>
+    <p><strong>VIN:</strong> <span id="c-vin"></span></p>
+    <p><strong>Start Gallons:</strong> <span id="c-start"></span></p>
+    <p><strong>End Gallons:</strong> <span id="c-end"></span></p>
+    <p><strong>Gallons Used:</strong> <span id="c-used"></span></p>
+    <p><strong>Date:</strong> <span id="c-date"></span></p>
+    <p><strong>Initials:</strong> <span id="c-user"></span></p>
+    <button onclick="window.print()">Print This Slip</button>
+  </div>
+
   <script src="https://unpkg.com/@ericblade/quagga2@1.2.6/dist/quagga.min.js"></script>
   <script>
     const vin = document.getElementById("vin");
@@ -89,24 +105,34 @@
     const end = document.getElementById("endGallons");
     const used = document.getElementById("gallonsUsed");
     const date = document.getElementById("date");
-    const scanBtn = document.getElementById("scanBtn");
-    const video = document.getElementById("scanner");
+    const initials = document.getElementById("initials");
+    const form = document.getElementById("fuelForm");
+    const confirmBox = document.getElementById("confirmation");
 
-    // Auto-fill CST date
+    const cVin = document.getElementById("c-vin");
+    const cStart = document.getElementById("c-start");
+    const cEnd = document.getElementById("c-end");
+    const cUsed = document.getElementById("c-used");
+    const cDate = document.getElementById("c-date");
+    const cUser = document.getElementById("c-user");
+
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
     date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-    // Calculate gallons used
     function calc() {
       const s = parseFloat(start.value) || 0;
       const e = parseFloat(end.value) || 0;
       used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
     }
+
     start.addEventListener("input", calc);
     end.addEventListener("input", calc);
 
+    window.onload = () => vin.focus();
+
     // VIN Barcode Scanner (QuaggaJS)
-    scanBtn.addEventListener("click", () => {
+    document.getElementById("scanBtn").addEventListener("click", () => {
+      const video = document.getElementById("scanner");
       video.style.display = "block";
       Quagga.init({
         inputStream: {
@@ -138,8 +164,35 @@
       });
     });
 
-    // Auto-focus VIN on load
-    window.onload = () => vin.focus();
+    // Custom form submission to Google Apps Script + show confirmation
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const data = new URLSearchParams();
+      data.append("vin", vin.value.trim());
+      data.append("startGallons", start.value);
+      data.append("endGallons", end.value);
+      data.append("gallonsUsed", used.value);
+      data.append("date", date.value);
+      data.append("initials", initials.value.trim().toUpperCase());
+
+      await fetch("https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec", {
+        method: "POST",
+        mode: "no-cors",
+        body: data
+      });
+
+      // Show confirmation
+      cVin.textContent = vin.value.trim();
+      cStart.textContent = start.value;
+      cEnd.textContent = end.value;
+      cUsed.textContent = used.value;
+      cDate.textContent = date.value;
+      cUser.textContent = initials.value.trim().toUpperCase();
+
+      form.style.display = "none";
+      confirmBox.style.display = "block";
+    });
   </script>
 </body>
 </html>
