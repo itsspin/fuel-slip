@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
+  <title>Midway Ford Fuel Slip</title>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Midway Ford Fuel Slip</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -68,20 +68,16 @@
     <label for="initials">Initials:</label>
     <input type="text" id="initials" name="initials" maxlength="4" required />
 
-    <input type="hidden" id="ip" name="ip" />
-
     <button type="submit">Submit</button>
   </form>
 
   <div class="success" id="successMessage"></div>
 
   <script>
-    // Format today's date in CST
     const dateField = document.getElementById('date');
     const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
     dateField.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-    // Calculate Gallons Used
     function calculateGallonsUsed() {
       const start = parseFloat(document.getElementById('startGallons').value) || 0;
       const end = parseFloat(document.getElementById('endGallons').value) || 0;
@@ -92,17 +88,6 @@
     document.getElementById('startGallons').addEventListener('input', calculateGallonsUsed);
     document.getElementById('endGallons').addEventListener('input', calculateGallonsUsed);
 
-    // Fetch public IP
-    fetch('https://api.ipify.org?format=json')
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById('ip').value = data.ip;
-      })
-      .catch(err => {
-        console.error('Could not get IP:', err);
-      });
-
-    // Submit form to Apps Script Web App
     document.getElementById('fuelForm').addEventListener('submit', function(e) {
       e.preventDefault();
 
@@ -112,8 +97,7 @@
         endGallons: document.getElementById('endGallons').value,
         gallonsUsed: document.getElementById('gallonsUsed').value,
         date: document.getElementById('date').value,
-        initials: document.getElementById('initials').value.trim().toUpperCase(),
-        ip: document.getElementById('ip').value
+        initials: document.getElementById('initials').value.trim().toUpperCase()
       };
 
       fetch('https://script.google.com/macros/s/AKfycbxe-A0WXbu5V1f45ILQQNNmD4PNzal_80iSSc5JGTy7wQ8c7s5HIUKeuJHl0dc8gkhB/exec', {
@@ -124,8 +108,8 @@
         body: JSON.stringify(formData)
       })
       .then(res => res.text())
-      .then(result => {
-        if (result === "Success" || result.toLowerCase().includes("success")) {
+      .then(response => {
+        if (response.toLowerCase().includes("success")) {
           document.getElementById('successMessage').textContent = "Submission successful!";
           document.getElementById('fuelForm').reset();
           dateField.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
@@ -134,14 +118,13 @@
         }
       })
       .catch(error => {
-        console.error('Error submitting form:', error);
+        console.error('Error:', error);
         document.getElementById('successMessage').textContent = "An error occurred.";
       });
     });
 
-    // Stub for VIN scanner
     function startScanner() {
-      alert("VIN scanning not implemented. Manually enter last 8 characters.");
+      alert("VIN scanning not implemented. Please enter last 8 manually.");
     }
   </script>
 </body>
