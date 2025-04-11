@@ -86,7 +86,7 @@
   </div>
 
   <script>
-    const scriptURL = "https://script.google.com/macros/s/AKfycbweYaZ8qT8cIwPlIqvbGMFUAY9q2_A9vPFfMjBTNQKTZrD2OBTlOL0HlARnUoc810cz/exec";
+    const scriptURL = "https://script.google.com/macros/s/AKfycbweYaZ8qT8cIwPlIqvbGMFUAY9q2_A9vPFfMjBTNQKTZrD2OBTlOL0HlARnUoc810cz/exec"; // replace with your actual script URL
     let formData = {};
 
     document.getElementById("fuelForm").addEventListener("submit", function(e) {
@@ -96,26 +96,15 @@
       const vin = document.getElementById("vin").value.trim();
       const startGallons = parseFloat(document.getElementById("start-gallons").value);
       const endGallons = parseFloat(document.getElementById("end-gallons").value);
+      const usedGallons = endGallons - startGallons; // Calculate used gallons
       const today = new Date();
       const formattedDate = today.toLocaleDateString("en-US");
 
-      // Validate VIN to be exactly 8 characters
+      // Validate the VIN
       if (vin.length !== 8) {
         alert("VIN should be exactly 8 characters.");
         return;
       }
-
-      if (!/^[A-Z]{2,4}$/.test(initials)) {
-        alert("Initials must be 2–4 uppercase letters.");
-        return;
-      }
-
-      if (startGallons >= endGallons) {
-        alert("Start Gallons must be less than End Gallons.");
-        return;
-      }
-
-      const usedGallons = endGallons - startGallons;
 
       formData = {
         action: "submitFuelSlip",
@@ -152,7 +141,7 @@
         if (result.success) {
           document.getElementById("successMessage").textContent = "Fuel slip submitted successfully!";
         } else {
-          document.getElementById("successMessage").textContent = "Submission failed: " + (result.message || "Unknown error.");
+          document.getElementById("successMessage").textContent = "Submission failed: " + result.message;
         }
         document.getElementById("successMessage").style.display = "block";
         document.getElementById("fuelForm").reset();
