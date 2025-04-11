@@ -37,6 +37,13 @@
       border-radius: 6px;
       box-sizing: border-box;
     }
+    input[type="text"]#vin,
+    input[type="text"]#initials {
+      text-transform: uppercase;
+    }
+    input[type="number"] {
+      step: 0.1;
+    }
     button {
       background-color: #007bff;
       color: white;
@@ -69,13 +76,13 @@
     <video id="scanner"></video>
 
     <label for="startGallons">Start Gallons:</label>
-    <input type="number" name="startGallons" id="startGallons" required />
+    <input type="number" name="startGallons" id="startGallons" step="0.1" required />
 
     <label for="endGallons">End Gallons:</label>
-    <input type="number" name="endGallons" id="endGallons" required />
+    <input type="number" name="endGallons" id="endGallons" step="0.1" required />
 
     <label for="gallonsUsed">Gallons Used:</label>
-    <input type="number" name="gallonsUsed" id="gallonsUsed" readonly />
+    <input type="number" name="gallonsUsed" id="gallonsUsed" step="0.1" readonly />
 
     <label for="date">Date:</label>
     <input type="text" name="date" id="date" readonly />
@@ -137,9 +144,7 @@
         inputStream: {
           type: "LiveStream",
           target: video,
-          constraints: {
-            facingMode: "environment"
-          }
+          constraints: { facingMode: "environment" }
         },
         decoder: {
           readers: ["code_128_reader", "code_39_reader", "pdf417_reader"]
@@ -156,19 +161,19 @@
       Quagga.onDetected(function(result) {
         const code = result.codeResult.code;
         if (code.length >= 8) {
-          vin.value = code.slice(-8);
+          vin.value = code.slice(-8).toUpperCase();
           Quagga.stop();
           video.style.display = "none";
         }
       });
     });
 
-    // Submit form to Apps Script
+    // Form submit
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
       const data = new URLSearchParams();
-      data.append("vin", vin.value.trim());
+      data.append("vin", vin.value.trim().toUpperCase());
       data.append("startGallons", start.value);
       data.append("endGallons", end.value);
       data.append("gallonsUsed", used.value);
@@ -181,8 +186,8 @@
         body: data
       });
 
-      // Confirmation
-      cVin.textContent = vin.value.trim();
+      // Fill confirmation slip
+      cVin.textContent = vin.value.trim().toUpperCase();
       cStart.textContent = start.value;
       cEnd.textContent = end.value;
       cUsed.textContent = used.value;
