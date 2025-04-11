@@ -87,7 +87,7 @@
   </div>
 
   <script>
-    const scriptURL = "https://script.google.com/macros/s/AKfycbzNYGI1M8V19Ipp77Gk3iH9agiDFl1yYb7Rnz50cAALWfNkyP2Ni300N69a9RXCjNM0/exec";
+    const scriptURL = "https://script.google.com/macros/s/AKfycbyRUYVBpcoHvDI4mLfpxDPjUnLAv0V4f55GQXgV18oXivJE6Pe3Runy51v3MDpTX9U0/exec";
     let formData = {};
 
     document.getElementById("fuelForm").addEventListener("submit", function(e) {
@@ -97,7 +97,8 @@
       const vin = document.getElementById("vin").value.trim();
       const startGallons = parseFloat(document.getElementById("start-gallons").value);
       const endGallons = parseFloat(document.getElementById("end-gallons").value);
-      const date = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      const formattedDate = today.toLocaleDateString("en-US"); // MM/DD/YYYY
 
       if (!/^[A-Z]{2,4}$/.test(initials)) {
         alert("Initials must be 2–4 uppercase letters.");
@@ -118,14 +119,14 @@
         start_gallons: startGallons,
         end_gallons: endGallons,
         used_gallons: usedGallons,
-        date
+        date: formattedDate
       };
 
       document.getElementById("confirm-initials").textContent = "Initials: " + initials;
       document.getElementById("confirm-vin").textContent = "VIN: " + vin;
       document.getElementById("confirm-start-gallons").textContent = "Start Gallons: " + startGallons;
       document.getElementById("confirm-end-gallons").textContent = "End Gallons: " + endGallons + " (Used: " + usedGallons + ")";
-      document.getElementById("confirm-date").textContent = "Date: " + date;
+      document.getElementById("confirm-date").textContent = "Date: " + formattedDate;
 
       document.getElementById("confirmation-overlay").style.display = "flex";
     });
@@ -150,7 +151,7 @@
         }
         document.getElementById("successMessage").style.display = "block";
         document.getElementById("fuelForm").reset();
-        document.getElementById("date").value = new Date().toISOString().split('T')[0];
+        document.getElementById("date").value = new Date().toLocaleDateString("en-US");
       } catch (err) {
         document.getElementById("successMessage").textContent = "Error submitting: " + err;
         document.getElementById("successMessage").style.display = "block";
@@ -158,7 +159,7 @@
     }
 
     window.onload = () => {
-      document.getElementById("date").value = new Date().toISOString().split('T')[0];
+      document.getElementById("date").value = new Date().toLocaleDateString("en-US");
     };
   </script>
 </body>
