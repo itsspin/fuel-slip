@@ -260,7 +260,7 @@
   document.getElementById("scanBtn").addEventListener("click", () => {
     const video = document.getElementById("scanner");
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices?.getUserMedia) {
       alert("Camera access is not supported.");
       return;
     }
@@ -282,7 +282,7 @@
     }, function(err) {
       if (err) {
         console.error(err);
-        alert("Camera init failed. Make sure you're on HTTPS and allowed access.");
+        alert("Camera initialization failed. Please check browser permissions and make sure you allowed access to the camera on this page.");
         video.style.display = "none";
         return;
       }
