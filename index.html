@@ -127,10 +127,9 @@
 
     start.addEventListener("input", calc);
     end.addEventListener("input", calc);
-
     window.onload = () => vin.focus();
 
-    // VIN Barcode Scanner (QuaggaJS)
+    // VIN Scanner
     document.getElementById("scanBtn").addEventListener("click", () => {
       const video = document.getElementById("scanner");
       video.style.display = "block";
@@ -164,7 +163,7 @@
       });
     });
 
-    // Custom form submission to Google Apps Script + show confirmation
+    // Submit form to Apps Script
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -182,7 +181,7 @@
         body: data
       });
 
-      // Show confirmation
+      // Confirmation
       cVin.textContent = vin.value.trim();
       cStart.textContent = start.value;
       cEnd.textContent = end.value;
