@@ -135,10 +135,6 @@
       display: block; /* Show debug info by default */
     }
   </style>
-<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
-<script>
-  emailjs.init("trr");
-</script>
 </head>
 <body>
 <h1>Midway Ford Fuel Slip</h1>
@@ -361,22 +357,10 @@
           cDate.textContent = formData.date;
           cUser.textContent = formData.initials;
           
-          // Send Email via EmailJS
-          emailjs.send("service_jbw2q2o", "template_azb4var", formData)
-            .then(() => {
-              logDebug("Email sent successfully");
-              confirmationPage.classList.remove("visible");
-              finalConfirmation.classList.add("visible");
-            })
-            .catch(error => {
-              logDebug("EmailJS error: " + JSON.stringify(error));
-              // Continue even if email fails
-              confirmationPage.classList.remove("visible");
-              finalConfirmation.classList.add("visible");
-            })
-            .finally(() => {
-              loadingOverlay.style.display = "none";
-            });
+          // EmailJS portion removed for testing
+          confirmationPage.classList.remove("visible");
+          finalConfirmation.classList.add("visible");
+          loadingOverlay.style.display = "none";
         })
         .catch(error => {
           logDebug("Fetch error: " + error.message);
