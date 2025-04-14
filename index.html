@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,13 +29,17 @@
       margin: 0.8rem 0 0.2rem;
       font-weight: 600;
     }
-    input, button {
+    input, button, select, textarea {
       width: 100%;
       padding: 0.6rem;
       font-size: 1rem;
       border: 1px solid #ccc;
       border-radius: 6px;
       box-sizing: border-box;
+    }
+    textarea {
+      min-height: 80px;
+      resize: vertical;
     }
     input[type="text"]#vin,
     input[type="text"]#initials {
@@ -83,6 +86,13 @@
   <button type="button" id="scanBtn">Scan VIN Barcode</button>
   <video id="scanner" autoplay muted playsinline></video>
 
+  <label for="station">Station:</label>
+  <select id="station" required>
+    <option value="">Select Station</option>
+    <option value="100">100</option>
+    <option value="300">300</option>
+  </select>
+
   <label for="startGallons">Start Gallons:</label>
   <input type="number" id="startGallons" step="0.1" required />
 
@@ -91,6 +101,9 @@
 
   <label for="gallonsUsed">Gallons Used:</label>
   <input type="number" id="gallonsUsed" step="0.1" readonly />
+
+  <label for="billTo">Bill To:</label>
+  <textarea id="billTo" placeholder="Enter billing information"></textarea>
 
   <label for="date">Date:</label>
   <input type="text" id="date" readonly />
@@ -104,9 +117,11 @@
 <div id="confirmationPage" class="card">
   <h2>Confirm Your Entry</h2>
   <p><strong>VIN:</strong> <span id="conf-vin"></span></p>
+  <p><strong>Station:</strong> <span id="conf-station"></span></p>
   <p><strong>Start Gallons:</strong> <span id="conf-start"></span></p>
   <p><strong>End Gallons:</strong> <span id="conf-end"></span></p>
   <p><strong>Gallons Used:</strong> <span id="conf-used"></span></p>
+  <p><strong>Bill To:</strong> <span id="conf-billTo"></span></p>
   <p><strong>Date:</strong> <span id="conf-date"></span></p>
   <p><strong>Initials:</strong> <span id="conf-user"></span></p>
   <button id="confirmSubmit">Confirm & Submit</button>
@@ -116,9 +131,11 @@
 <div id="finalConfirmation" class="card">
   <h2>Fuel Slip Submitted</h2>
   <p><strong>VIN:</strong> <span id="c-vin"></span></p>
+  <p><strong>Station:</strong> <span id="c-station"></span></p>
   <p><strong>Start Gallons:</strong> <span id="c-start"></span></p>
   <p><strong>End Gallons:</strong> <span id="c-end"></span></p>
   <p><strong>Gallons Used:</strong> <span id="c-used"></span></p>
+  <p><strong>Bill To:</strong> <span id="c-billTo"></span></p>
   <p><strong>Date:</strong> <span id="c-date"></span></p>
   <p><strong>Initials:</strong> <span id="c-user"></span></p>
   <button onclick="window.print()">Print This Slip</button>
@@ -133,9 +150,11 @@
   const finalConfirmation = document.getElementById("finalConfirmation");
 
   const vin = document.getElementById("vin");
+  const station = document.getElementById("station");
   const start = document.getElementById("startGallons");
   const end = document.getElementById("endGallons");
   const used = document.getElementById("gallonsUsed");
+  const billTo = document.getElementById("billTo");
   const date = document.getElementById("date");
   const initials = document.getElementById("initials");
 
@@ -143,16 +162,20 @@
   date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
   const confVin = document.getElementById("conf-vin");
+  const confStation = document.getElementById("conf-station");
   const confStart = document.getElementById("conf-start");
   const confEnd = document.getElementById("conf-end");
   const confUsed = document.getElementById("conf-used");
+  const confBillTo = document.getElementById("conf-billTo");
   const confDate = document.getElementById("conf-date");
   const confUser = document.getElementById("conf-user");
 
   const cVin = document.getElementById("c-vin");
+  const cStation = document.getElementById("c-station");
   const cStart = document.getElementById("c-start");
   const cEnd = document.getElementById("c-end");
   const cUsed = document.getElementById("c-used");
+  const cBillTo = document.getElementById("c-billTo");
   const cDate = document.getElementById("c-date");
   const cUser = document.getElementById("c-user");
 
@@ -184,9 +207,11 @@
   fuelForm.addEventListener("submit", (e) => {
     e.preventDefault();
     confVin.textContent = vin.value.toUpperCase();
+    confStation.textContent = station.value;
     confStart.textContent = start.value;
     confEnd.textContent = end.value;
     confUsed.textContent = used.value;
+    confBillTo.textContent = billTo.value || "N/A";
     confDate.textContent = date.value;
     confUser.textContent = initials.value.toUpperCase();
     fuelForm.classList.remove("visible");
@@ -196,9 +221,11 @@
   document.getElementById("confirmSubmit").addEventListener("click", async () => {
     const data = new URLSearchParams();
     data.append("vin", vin.value.trim().toUpperCase());
+    data.append("station", station.value);
     data.append("startGallons", start.value);
     data.append("endGallons", end.value);
     data.append("gallonsUsed", used.value);
+    data.append("billTo", billTo.value);
     data.append("date", date.value);
     data.append("initials", initials.value.trim().toUpperCase());
 
@@ -209,9 +236,11 @@
     });
 
     cVin.textContent = vin.value.toUpperCase();
+    cStation.textContent = station.value;
     cStart.textContent = start.value;
     cEnd.textContent = end.value;
     cUsed.textContent = used.value;
+    cBillTo.textContent = billTo.value || "N/A";
     cDate.textContent = date.value;
     cUser.textContent = initials.value.toUpperCase();
 
@@ -219,9 +248,11 @@
     // Send Email via EmailJS
     emailjs.send("service_jbw2q2o", "template_azb4var", {
       vin: vin.value.trim().toUpperCase(),
+      station: station.value,
       startGallons: start.value,
       endGallons: end.value,
       gallonsUsed: used.value,
+      billTo: billTo.value || "N/A",
       date: date.value,
       initials: initials.value.trim().toUpperCase()
     }).then(() => {
@@ -234,19 +265,6 @@
 
   function goBack() {
     confirmationPage.classList.remove("visible");
-    // Send Email via EmailJS
-    emailjs.send("service_jbw2q2o", "template_azb4var", {
-      vin: vin.value.trim().toUpperCase(),
-      startGallons: start.value,
-      endGallons: end.value,
-      gallonsUsed: used.value,
-      date: date.value,
-      initials: initials.value.trim().toUpperCase()
-    }).then(() => {
-      console.log("Email sent successfully");
-    }, (error) => {
-      console.error("EmailJS error:", error);
-    });
     fuelForm.classList.add("visible");
   }
 
