@@ -137,7 +137,7 @@
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script>
-  emailjs.init("changethis");
+  emailjs.init("testing");
 </script>
 </head>
 <body>
@@ -327,7 +327,7 @@
         initials: initials.value.trim().toUpperCase()
       };
       
-      logDebug("Preparing to submit form data");
+      logDebug("Form data prepared: " + JSON.stringify(formData));
       
       // Create form data for direct POST
       const formDataObj = new FormData();
@@ -350,9 +350,15 @@
         .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(formData[key]))
         .join('&');
       
+      logDebug("URL encoded data: " + urlEncodedData);
+      
       xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
           logDebug(`Google Apps Script response status: ${xhr.status}`);
+          
+          if (xhr.responseText) {
+            logDebug("Response: " + xhr.responseText);
+          }
           
           // Continue regardless of response since Google Apps Script might return various status codes
           // Update confirmation screen
@@ -496,6 +502,10 @@
       checkLogin();
     }
   });
+  
+  // Enable debug mode for troubleshooting
+  // Uncomment this line to show debug info
+  // debugInfo.style.display = "block";
 </script>
 </body>
 </html>
