@@ -64,10 +64,37 @@
       width: 100%;
       margin-top: 1rem;
     }
+    .loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      color: white;
+      font-size: 1.2rem;
+    }
+    .spinner {
+      border: 4px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top: 4px solid white;
+      width: 40px;
+      height: 40px;
+      margin-right: 10px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script>
-  emailjs.init("");
+  emailjs.init("t");
 </script>
 </head>
 <body>
@@ -142,12 +169,18 @@
   <button onclick="resetForm()">Submit Another</button>
 </div>
 
-<script src="https://unpkg.com/@ericblade/quagga2@1.2.6/dist/quagga.min.js"></script>
+<div id="loadingOverlay" class="loading" style="display: none;">
+  <div class="spinner"></div>
+  <div>Submitting data...</div>
+</div>
+
+<script src="https://unpkg.com/@ericblade/quagga2@1.8.2/dist/quagga.min.js"></script>
 <script>
   const loginScreen = document.getElementById("loginScreen");
   const fuelForm = document.getElementById("fuelForm");
   const confirmationPage = document.getElementById("confirmationPage");
   const finalConfirmation = document.getElementById("finalConfirmation");
+  const loadingOverlay = document.getElementById("loadingOverlay");
 
   const vin = document.getElementById("vin");
   const station = document.getElementById("station");
@@ -219,48 +252,55 @@
   });
 
   document.getElementById("confirmSubmit").addEventListener("click", async () => {
-    const data = new URLSearchParams();
-    data.append("vin", vin.value.trim().toUpperCase());
-    data.append("station", station.value);
-    data.append("startGallons", start.value);
-    data.append("endGallons", end.value);
-    data.append("gallonsUsed", used.value);
-    data.append("billTo", billTo.value);
-    data.append("date", date.value);
-    data.append("initials", initials.value.trim().toUpperCase());
-
-    await fetch("https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec", {
-      method: "POST",
-      mode: "no-cors",
-      body: data
-    });
-
-    cVin.textContent = vin.value.toUpperCase();
-    cStation.textContent = station.value;
-    cStart.textContent = start.value;
-    cEnd.textContent = end.value;
-    cUsed.textContent = used.value;
-    cBillTo.textContent = billTo.value || "N/A";
-    cDate.textContent = date.value;
-    cUser.textContent = initials.value.toUpperCase();
-
-    confirmationPage.classList.remove("visible");
-    // Send Email via EmailJS
-    emailjs.send("service_jbw2q2o", "template_azb4var", {
-      vin: vin.value.trim().toUpperCase(),
-      station: station.value,
-      startGallons: start.value,
-      endGallons: end.value,
-      gallonsUsed: used.value,
-      billTo: billTo.value || "N/A",
-      date: date.value,
-      initials: initials.value.trim().toUpperCase()
-    }).then(() => {
-      console.log("Email sent successfully");
-    }, (error) => {
-      console.error("EmailJS error:", error);
-    });
-    finalConfirmation.classList.add("visible");
+    try {
+      loadingOverlay.style.display = "flex";
+      
+      const formData = {
+        vin: vin.value.trim().toUpperCase(),
+        station: station.value,
+        startGallons: start.value,
+        endGallons: end.value,
+        gallonsUsed: used.value,
+        billTo: billTo.value || "N/A",
+        date: date.value,
+        initials: initials.value.trim().toUpperCase()
+      };
+      
+      // Build URL with parameters for GET request (works better with Google Apps Script)
+      const url = new URL("https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec");
+      
+      // Append all form data as URL parameters
+      Object.keys(formData).forEach(key => {
+        url.searchParams.append(key, formData[key]);
+      });
+      
+      // Make the request
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        mode: "no-cors"
+      });
+      
+      // Update confirmation screen
+      cVin.textContent = formData.vin;
+      cStation.textContent = formData.station;
+      cStart.textContent = formData.startGallons;
+      cEnd.textContent = formData.endGallons;
+      cUsed.textContent = formData.gallonsUsed;
+      cBillTo.textContent = formData.billTo;
+      cDate.textContent = formData.date;
+      cUser.textContent = formData.initials;
+      
+      // Send Email via EmailJS
+      await emailjs.send("service_jbw2q2o", "template_azb4var", formData);
+      
+      confirmationPage.classList.remove("visible");
+      finalConfirmation.classList.add("visible");
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      alert("There was an error submitting your form. Please try again.");
+    } finally {
+      loadingOverlay.style.display = "none";
+    }
   });
 
   function goBack() {
@@ -277,45 +317,119 @@
 
   document.getElementById("scanBtn").addEventListener("click", () => {
     const video = document.getElementById("scanner");
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices?.getUserMedia) {
-      alert("Camera access is not supported.");
+    
+    // Check for camera support
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Camera access is not supported on your device or browser.");
       return;
     }
-
+    
     video.style.display = "block";
-
-    if (Quagga.initialized) Quagga.stop();
-
+    
+    // Stop any existing scanner
+    if (window.quaggaInstance) {
+      Quagga.stop();
+    }
+    
+    // Configure scanner with better mobile settings
     Quagga.init({
       inputStream: {
+        name: "Live",
         type: "LiveStream",
         target: video,
-        constraints: { facingMode: "environment" }
+        constraints: {
+          facingMode: "environment",
+          width: { min: 640 },
+          height: { min: 480 },
+          aspectRatio: { min: 1, max: 2 }
+        },
+        area: { // Only search in the center of the video
+          top: "20%",
+          right: "10%",
+          left: "10%",
+          bottom: "20%"
+        }
       },
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+      numOfWorkers: navigator.hardwareConcurrency || 4,
       decoder: {
-        readers: ["code_128_reader", "code_39_reader", "pdf417_reader"]
+        readers: [
+          "code_128_reader",
+          "code_39_reader",
+          "ean_reader",
+          "ean_8_reader",
+          "code_93_reader"
+        ]
       },
       locate: true
     }, function(err) {
       if (err) {
-        console.error(err);
+        console.error("Quagga initialization error:", err);
         alert("Camera initialization failed. Please check browser permissions and make sure you allowed access to the camera on this page.");
         video.style.display = "none";
         return;
       }
-      Quagga.initialized = true;
+      
+      window.quaggaInstance = true;
       Quagga.start();
+      
+      // Add a message to help users
+      const scanMessage = document.createElement("div");
+      scanMessage.id = "scanMessage";
+      scanMessage.style.textAlign = "center";
+      scanMessage.style.marginTop = "10px";
+      scanMessage.style.padding = "5px";
+      scanMessage.style.backgroundColor = "#f8f9fa";
+      scanMessage.style.borderRadius = "5px";
+      scanMessage.innerHTML = "Point camera at barcode. Make sure it's well-lit and in focus.";
+      video.parentNode.insertBefore(scanMessage, video.nextSibling);
     });
-
+    
+    // Improve detection with confidence threshold
+    let lastResult = null;
+    let sameResultCount = 0;
+    
     Quagga.onDetected(function(result) {
       const code = result.codeResult.code;
-      if (code.length >= 8) {
-        vin.value = code.slice(-8).toUpperCase();
-        Quagga.stop();
-        video.style.display = "none";
+      
+      // Only process codes that are likely to be VINs (alphanumeric, proper length)
+      if (code && code.length >= 8 && /^[A-Z0-9]+$/i.test(code)) {
+        // Check if this is the same as the last result (more confidence)
+        if (code === lastResult) {
+          sameResultCount++;
+          
+          // If we've seen the same result multiple times, it's likely correct
+          if (sameResultCount >= 2) {
+            vin.value = code.slice(-8).toUpperCase();
+            Quagga.stop();
+            video.style.display = "none";
+            
+            // Remove the scan message if it exists
+            const scanMessage = document.getElementById("scanMessage");
+            if (scanMessage) {
+              scanMessage.remove();
+            }
+            
+            window.quaggaInstance = false;
+          }
+        } else {
+          lastResult = code;
+          sameResultCount = 1;
+        }
+        
+        console.log("Detected barcode:", code, "Confidence:", result.codeResult.confidence);
       }
     });
+  });
+  
+  // Handle login with Enter key
+  document.getElementById("loginPass").addEventListener("keyup", function(event) {
+    if (event.key === "Enter") {
+      checkLogin();
+    }
   });
 </script>
 </body>
