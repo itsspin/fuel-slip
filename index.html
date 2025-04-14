@@ -1,497 +1,304 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Midway Ford Fuel Slip</title>
-<style>
-  body {
-    font-family: system-ui, sans-serif;
-    padding: 1.5rem;
-    max-width: 600px;
-    margin: auto;
-    background: #f2f2f2;
-    color: #333;
-  }
-  h1, h2 {
-    text-align: center;
-  }
-  form, .card {
-    background: #fff;
-    border-radius: 10px;
-    padding: 1.2rem;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-    display: none;
-  }
-  .visible { display: block !important; }
-  label {
-    display: block;
-    margin: 0.8rem 0 0.2rem;
-    font-weight: 600;
-  }
-  input, button, select, textarea {
-    width: 100%;
-    padding: 0.6rem;
-    font-size: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    box-sizing: border-box;
-  }
-  textarea {
-    min-height: 80px;
-    resize: vertical;
-  }
-  input[type="text"]#vin,
-  input[type="text"]#initials {
-    text-transform: uppercase;
-  }
-  input[type="number"] {
-    step: 0.1;
-  }
-  button {
-    background-color: #007bff;
-    color: white;
-    border: none;
-    margin-top: 1rem;
-    cursor: pointer;
-    font-weight: bold;
-  }
-  button:hover {
-    background-color: #0056b3;
-  }
-  #scanner-container {
-    display: none;
-    position: relative;
-    width: 100%;
-    margin-top: 1rem;
-  }
-  #scanner {
-    width: 100%;
-    height: 300px;
-    background-color: #000;
-  }
-  #scanner-message {
-    position: absolute;
-    bottom: 10px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    background-color: rgba(0,0,0,0.7);
-    color: white;
-    padding: 8px;
-    font-size: 14px;
-  }
-  #scanner-close {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background-color: rgba(255,255,255,0.7);
-    color: black;
-    border-radius: 50%;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 18px;
-    z-index: 10;
-  }
-  .loading {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.7);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    color: white;
-    font-size: 1.2rem;
-  }
-  .spinner {
-    border: 4px solid rgba(255,255,255,0.3);
-    border-radius: 50%;
-    border-top: 4px solid white;
-    width: 40px;
-    height: 40px;
-    margin-right: 10px;
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  .debug-info {
-    margin-top: 20px;
-    padding: 10px;
-    background-color: #f8f9fa;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    font-size: 12px;
-    display: block; /* Show debug info by default */
-  }
-  #hidden-iframe {
-    display: none;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Midway Ford Fuel Slip</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 1.5rem;
+      max-width: 600px;
+      margin: auto;
+      background: #f2f2f2;
+      color: #333;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    form, .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1.2rem;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      display: none;
+    }
+    .visible { display: block !important; }
+    label {
+      display: block;
+      margin: 0.8rem 0 0.2rem;
+      font-weight: 600;
+    }
+    input, button {
+      width: 100%;
+      padding: 0.6rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    input[type="text"]#vin,
+    input[type="text"]#initials {
+      text-transform: uppercase;
+    }
+    input[type="number"] {
+      step: 0.1;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      margin-top: 1rem;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #scanner {
+      display: none;
+      width: 100%;
+      margin-top: 1rem;
+    }
+  </style>
+<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+<script>
+  emailjs.init("test");
+</script>
 </head>
 <body>
 <h1>Midway Ford Fuel Slip</h1>
 
 <div id="loginScreen" class="card visible">
-<h2>Login</h2>
-<label for="loginPass">Enter Password:</label>
-<input type="password" id="loginPass" />
-<button type="button" onclick="checkLogin()">Login</button>
+  <h2>Login</h2>
+  <label for="loginPass">Enter Password:</label>
+  <input type="password" id="loginPass" />
+  <button onclick="checkLogin()">Login</button>
 </div>
-
-<!-- This is our actual form that will submit data -->
-<form id="dataForm" target="hidden-iframe" method="GET" action="https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec" style="display:none;">
-  <input type="hidden" name="vin" id="form-vin">
-  <input type="hidden" name="station" id="form-station">
-  <input type="hidden" name="startGallons" id="form-startGallons">
-  <input type="hidden" name="endGallons" id="form-endGallons">
-  <input type="hidden" name="gallonsUsed" id="form-gallonsUsed">
-  <input type="hidden" name="billTo" id="form-billTo">
-  <input type="hidden" name="date" id="form-date">
-  <input type="hidden" name="initials" id="form-initials">
-</form>
-
-<!-- Hidden iframe for form submission -->
-<iframe name="hidden-iframe" id="hidden-iframe"></iframe>
 
 <form id="fuelForm" class="card">
-<label for="vin">VIN (Last 8 Characters):</label>
-<input type="text" id="vin" maxlength="8" required />
-<button type="button" id="scanBtn">Scan VIN Barcode</button>
+  <label for="vin">VIN (Last 8 Characters):</label>
+  <input type="text" id="vin" maxlength="8" required />
+  <button type="button" id="scanBtn">Scan VIN Barcode</button>
+  <video id="scanner" autoplay muted playsinline></video>
 
-<div id="scanner-container">
-  <div id="scanner-close">×</div>
-  <div id="scanner"></div>
-  <div id="scanner-message">Point camera at barcode</div>
-</div>
+  <label for="startGallons">Start Gallons:</label>
+  <input type="number" id="startGallons" step="0.1" required />
 
-<label for="station">Station:</label>
-<select id="station" required>
-  <option value="">Select Station</option>
-  <option value="100">100</option>
-  <option value="300">300</option>
-</select>
+  <label for="endGallons">End Gallons:</label>
+  <input type="number" id="endGallons" step="0.1" required />
 
-<label for="startGallons">Start Gallons:</label>
-<input type="number" id="startGallons" step="0.1" required />
+  <label for="gallonsUsed">Gallons Used:</label>
+  <input type="number" id="gallonsUsed" step="0.1" readonly />
 
-<label for="endGallons">End Gallons:</label>
-<input type="number" id="endGallons" step="0.1" required />
+  <label for="date">Date:</label>
+  <input type="text" id="date" readonly />
 
-<label for="gallonsUsed">Gallons Used:</label>
-<input type="number" id="gallonsUsed" step="0.1" readonly />
+  <label for="initials">Initials:</label>
+  <input type="text" id="initials" maxlength="4" required />
 
-<label for="billTo">Bill To:</label>
-<textarea id="billTo" placeholder="Enter billing information"></textarea>
-
-<label for="date">Date:</label>
-<input type="text" id="date" readonly />
-
-<label for="initials">Initials:</label>
-<input type="text" id="initials" maxlength="4" required />
-
-<button type="submit">Submit</button>
-
-<div id="debug-info" class="debug-info"></div>
+  <button type="submit">Submit</button>
 </form>
 
 <div id="confirmationPage" class="card">
-<h2>Confirm Your Entry</h2>
-<p><strong>VIN:</strong> <span id="conf-vin"></span></p>
-<p><strong>Station:</strong> <span id="conf-station"></span></p>
-<p><strong>Start Gallons:</strong> <span id="conf-start"></span></p>
-<p><strong>End Gallons:</strong> <span id="conf-end"></span></p>
-<p><strong>Gallons Used:</strong> <span id="conf-used"></span></p>
-<p><strong>Bill To:</strong> <span id="conf-billTo"></span></p>
-<p><strong>Date:</strong> <span id="conf-date"></span></p>
-<p><strong>Initials:</strong> <span id="conf-user"></span></p>
-<button id="confirmSubmit" type="button">Confirm & Submit</button>
-<button type="button" onclick="goBack()">Go Back</button>
+  <h2>Confirm Your Entry</h2>
+  <p><strong>VIN:</strong> <span id="conf-vin"></span></p>
+  <p><strong>Start Gallons:</strong> <span id="conf-start"></span></p>
+  <p><strong>End Gallons:</strong> <span id="conf-end"></span></p>
+  <p><strong>Gallons Used:</strong> <span id="conf-used"></span></p>
+  <p><strong>Date:</strong> <span id="conf-date"></span></p>
+  <p><strong>Initials:</strong> <span id="conf-user"></span></p>
+  <button id="confirmSubmit">Confirm & Submit</button>
+  <button onclick="goBack()">Go Back</button>
 </div>
 
 <div id="finalConfirmation" class="card">
-<h2>Fuel Slip Submitted</h2>
-<p><strong>VIN:</strong> <span id="c-vin"></span></p>
-<p><strong>Station:</strong> <span id="c-station"></span></p>
-<p><strong>Start Gallons:</strong> <span id="c-start"></span></p>
-<p><strong>End Gallons:</strong> <span id="c-end"></span></p>
-<p><strong>Gallons Used:</strong> <span id="c-used"></span></p>
-<p><strong>Bill To:</strong> <span id="c-billTo"></span></p>
-<p><strong>Date:</strong> <span id="c-date"></span></p>
-<p><strong>Initials:</strong> <span id="c-user"></span></p>
-<button type="button" onclick="window.print()">Print This Slip</button>
-<button type="button" onclick="resetForm()">Submit Another</button>
+  <h2>Fuel Slip Submitted</h2>
+  <p><strong>VIN:</strong> <span id="c-vin"></span></p>
+  <p><strong>Start Gallons:</strong> <span id="c-start"></span></p>
+  <p><strong>End Gallons:</strong> <span id="c-end"></span></p>
+  <p><strong>Gallons Used:</strong> <span id="c-used"></span></p>
+  <p><strong>Date:</strong> <span id="c-date"></span></p>
+  <p><strong>Initials:</strong> <span id="c-user"></span></p>
+  <button onclick="window.print()">Print This Slip</button>
+  <button onclick="resetForm()">Submit Another</button>
 </div>
 
-<div id="loadingOverlay" class="loading" style="display: none;">
-<div class="spinner"></div>
-<div>Submitting data...</div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://unpkg.com/@ericblade/quagga2@1.2.6/dist/quagga.min.js"></script>
 <script>
-const loginScreen = document.getElementById("loginScreen");
-const fuelForm = document.getElementById("fuelForm");
-const confirmationPage = document.getElementById("confirmationPage");
-const finalConfirmation = document.getElementById("finalConfirmation");
-const loadingOverlay = document.getElementById("loadingOverlay");
-const debugInfo = document.getElementById("debug-info");
-const dataForm = document.getElementById("dataForm");
-const hiddenIframe = document.getElementById("hidden-iframe");
+  const loginScreen = document.getElementById("loginScreen");
+  const fuelForm = document.getElementById("fuelForm");
+  const confirmationPage = document.getElementById("confirmationPage");
+  const finalConfirmation = document.getElementById("finalConfirmation");
 
-const vin = document.getElementById("vin");
-const station = document.getElementById("station");
-const start = document.getElementById("startGallons");
-const end = document.getElementById("endGallons");
-const used = document.getElementById("gallonsUsed");
-const billTo = document.getElementById("billTo");
-const date = document.getElementById("date");
-const initials = document.getElementById("initials");
+  const vin = document.getElementById("vin");
+  const start = document.getElementById("startGallons");
+  const end = document.getElementById("endGallons");
+  const used = document.getElementById("gallonsUsed");
+  const date = document.getElementById("date");
+  const initials = document.getElementById("initials");
 
-// Hidden form fields
-const formVin = document.getElementById("form-vin");
-const formStation = document.getElementById("form-station");
-const formStart = document.getElementById("form-startGallons");
-const formEnd = document.getElementById("form-endGallons");
-const formUsed = document.getElementById("form-gallonsUsed");
-const formBillTo = document.getElementById("form-billTo");
-const formDate = document.getElementById("form-date");
-const formInitials = document.getElementById("form-initials");
+  const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
+  date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
 
-const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
-date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+  const confVin = document.getElementById("conf-vin");
+  const confStart = document.getElementById("conf-start");
+  const confEnd = document.getElementById("conf-end");
+  const confUsed = document.getElementById("conf-used");
+  const confDate = document.getElementById("conf-date");
+  const confUser = document.getElementById("conf-user");
 
-const confVin = document.getElementById("conf-vin");
-const confStation = document.getElementById("conf-station");
-const confStart = document.getElementById("conf-start");
-const confEnd = document.getElementById("conf-end");
-const confUsed = document.getElementById("conf-used");
-const confBillTo = document.getElementById("conf-billTo");
-const confDate = document.getElementById("conf-date");
-const confUser = document.getElementById("conf-user");
+  const cVin = document.getElementById("c-vin");
+  const cStart = document.getElementById("c-start");
+  const cEnd = document.getElementById("c-end");
+  const cUsed = document.getElementById("c-used");
+  const cDate = document.getElementById("c-date");
+  const cUser = document.getElementById("c-user");
 
-const cVin = document.getElementById("c-vin");
-const cStation = document.getElementById("c-station");
-const cStart = document.getElementById("c-start");
-const cEnd = document.getElementById("c-end");
-const cUsed = document.getElementById("c-used");
-const cBillTo = document.getElementById("c-billTo");
-const cDate = document.getElementById("c-date");
-const cUser = document.getElementById("c-user");
-
-// For debugging
-function logDebug(message) {
-  console.log(message);
-  if (debugInfo) {
-    const timestamp = new Date().toLocaleTimeString();
-    debugInfo.innerHTML += `<div>[${timestamp}] ${message}</div>`;
-  }
-}
-
-// Check if user is already logged in
-if (localStorage.getItem("fuelLogin") === "yes") {
-  loginScreen.classList.remove("visible");
-  fuelForm.classList.add("visible");
-}
-
-function checkLogin() {
-  const pass = document.getElementById("loginPass").value;
-  if (pass === "midway123") {
-    localStorage.setItem("fuelLogin", "yes");
+  if (localStorage.getItem("fuelLogin") === "yes") {
     loginScreen.classList.remove("visible");
     fuelForm.classList.add("visible");
-  } else {
-    alert("Incorrect password.");
   }
-}
 
-function calc() {
-  const s = parseFloat(start.value) || 0;
-  const e = parseFloat(end.value) || 0;
-  used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
-}
+  function checkLogin() {
+    const pass = document.getElementById("loginPass").value;
+    if (pass === "midway123") {
+      localStorage.setItem("fuelLogin", "yes");
+      loginScreen.classList.remove("visible");
+      fuelForm.classList.add("visible");
+    } else {
+      alert("Incorrect password.");
+    }
+  }
 
-start.addEventListener("input", calc);
-end.addEventListener("input", calc);
+  function calc() {
+    const s = parseFloat(start.value) || 0;
+    const e = parseFloat(end.value) || 0;
+    used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
+  }
 
-fuelForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  confVin.textContent = vin.value.toUpperCase();
-  confStation.textContent = station.value;
-  confStart.textContent = start.value;
-  confEnd.textContent = end.value;
-  confUsed.textContent = used.value;
-  confBillTo.textContent = billTo.value || "N/A";
-  confDate.textContent = date.value;
-  confUser.textContent = initials.value.toUpperCase();
-  fuelForm.classList.remove("visible");
-  confirmationPage.classList.add("visible");
-});
+  start.addEventListener("input", calc);
+  end.addEventListener("input", calc);
 
-// Listen for messages from the iframe
-hiddenIframe.addEventListener('load', function() {
-  logDebug("Form submitted, iframe loaded");
-  
-  // Show final confirmation after a short delay
-  setTimeout(function() {
-    loadingOverlay.style.display = "none";
+  fuelForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    confVin.textContent = vin.value.toUpperCase();
+    confStart.textContent = start.value;
+    confEnd.textContent = end.value;
+    confUsed.textContent = used.value;
+    confDate.textContent = date.value;
+    confUser.textContent = initials.value.toUpperCase();
+    fuelForm.classList.remove("visible");
+    confirmationPage.classList.add("visible");
+  });
+
+  document.getElementById("confirmSubmit").addEventListener("click", async () => {
+    const data = new URLSearchParams();
+    data.append("vin", vin.value.trim().toUpperCase());
+    data.append("startGallons", start.value);
+    data.append("endGallons", end.value);
+    data.append("gallonsUsed", used.value);
+    data.append("date", date.value);
+    data.append("initials", initials.value.trim().toUpperCase());
+
+    await fetch("https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec", {
+      method: "POST",
+      mode: "no-cors",
+      body: data
+    });
+
+    cVin.textContent = vin.value.toUpperCase();
+    cStart.textContent = start.value;
+    cEnd.textContent = end.value;
+    cUsed.textContent = used.value;
+    cDate.textContent = date.value;
+    cUser.textContent = initials.value.toUpperCase();
+
     confirmationPage.classList.remove("visible");
+    // Send Email via EmailJS
+    emailjs.send("service_jbw2q2o", "template_azb4var", {
+      vin: vin.value.trim().toUpperCase(),
+      startGallons: start.value,
+      endGallons: end.value,
+      gallonsUsed: used.value,
+      date: date.value,
+      initials: initials.value.trim().toUpperCase()
+    }).then(() => {
+      console.log("Email sent successfully");
+    }, (error) => {
+      console.error("EmailJS error:", error);
+    });
     finalConfirmation.classList.add("visible");
-  }, 1000);
-});
+  });
 
-document.getElementById("confirmSubmit").addEventListener("click", () => {
-  try {
-    loadingOverlay.style.display = "flex";
-    
-    // Fill in the hidden form fields
-    formVin.value = vin.value.trim().toUpperCase();
-    formStation.value = station.value;
-    formStart.value = start.value;
-    formEnd.value = end.value;
-    formUsed.value = used.value;
-    formBillTo.value = billTo.value || "N/A";
-    formDate.value = date.value;
-    formInitials.value = initials.value.trim().toUpperCase();
-    
-    // Log the values being submitted
-    logDebug("Submitting values:");
-    logDebug("VIN: " + formVin.value);
-    logDebug("Station: " + formStation.value);
-    logDebug("Start: " + formStart.value);
-    logDebug("End: " + formEnd.value);
-    logDebug("Used: " + formUsed.value);
-    logDebug("Bill To: " + formBillTo.value);
-    logDebug("Date: " + formDate.value);
-    logDebug("Initials: " + formInitials.value);
-    
-    // Update confirmation screen
-    cVin.textContent = formVin.value;
-    cStation.textContent = formStation.value;
-    cStart.textContent = formStart.value;
-    cEnd.textContent = formEnd.value;
-    cUsed.textContent = formUsed.value;
-    cBillTo.textContent = formBillTo.value;
-    cDate.textContent = formDate.value;
-    cUser.textContent = formInitials.value;
-    
-    // Submit the form
-    dataForm.submit();
-    
-  } catch (error) {
-    logDebug("Error in form submission: " + error.message);
-    alert("There was an error submitting your form. Please try again.");
-    loadingOverlay.style.display = "none";
-  }
-});
-
-function goBack() {
-  confirmationPage.classList.remove("visible");
-  fuelForm.classList.add("visible");
-}
-
-function resetForm() {
-  fuelForm.reset();
-  date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
-  finalConfirmation.classList.remove("visible");
-  fuelForm.classList.add("visible");
-}
-
-// HTML5 QR Code Scanner setup
-let html5QrCode;
-const scannerContainer = document.getElementById("scanner-container");
-const scannerElement = document.getElementById("scanner");
-const scannerClose = document.getElementById("scanner-close");
-
-document.getElementById("scanBtn").addEventListener("click", () => {
-  try {
-    scannerContainer.style.display = "block";
-    
-    logDebug("Starting QR scanner");
-    
-    html5QrCode = new Html5Qrcode("scanner");
-    
-    const qrCodeSuccessCallback = (decodedText) => {
-      logDebug("Code scanned: " + decodedText);
-      
-      // Extract last 8 characters if longer
-      if (decodedText.length >= 8) {
-        vin.value = decodedText.slice(-8).toUpperCase();
-      } else {
-        vin.value = decodedText.toUpperCase();
-      }
-      
-      stopScanner();
-    };
-    
-    const config = {
-      fps: 10,
-      qrbox: { width: 250, height: 250 },
-      aspectRatio: 1.0,
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.EAN_13
-      ]
-    };
-    
-    // Start scanner with rear camera
-    html5QrCode.start(
-      { facingMode: "environment" }, 
-      config, 
-      qrCodeSuccessCallback, 
-      (errorMessage) => {
-        // Just log errors, don't alert
-        logDebug("QR Scanner error: " + errorMessage);
-      }
-    ).catch((err) => {
-      logDebug("Unable to start scanner: " + err);
-      alert("Could not access camera. Please check your camera permissions or enter VIN manually.");
-      scannerContainer.style.display = "none";
+  function goBack() {
+    confirmationPage.classList.remove("visible");
+    // Send Email via EmailJS
+    emailjs.send("service_jbw2q2o", "template_azb4var", {
+      vin: vin.value.trim().toUpperCase(),
+      startGallons: start.value,
+      endGallons: end.value,
+      gallonsUsed: used.value,
+      date: date.value,
+      initials: initials.value.trim().toUpperCase()
+    }).then(() => {
+      console.log("Email sent successfully");
+    }, (error) => {
+      console.error("EmailJS error:", error);
     });
-    
-  } catch (error) {
-    logDebug("Error initializing scanner: " + error.message);
-    alert("Could not initialize scanner. Please enter VIN manually.");
-    scannerContainer.style.display = "none";
+    fuelForm.classList.add("visible");
   }
-});
 
-function stopScanner() {
-  if (html5QrCode && html5QrCode.isScanning) {
-    html5QrCode.stop().then(() => {
-      logDebug("Scanner stopped");
-      scannerContainer.style.display = "none";
-    }).catch(err => {
-      logDebug("Error stopping scanner: " + err);
-      scannerContainer.style.display = "none";
+  function resetForm() {
+    fuelForm.reset();
+    date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+    finalConfirmation.classList.remove("visible");
+    fuelForm.classList.add("visible");
+  }
+
+  document.getElementById("scanBtn").addEventListener("click", () => {
+    const video = document.getElementById("scanner");
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices?.getUserMedia) {
+      alert("Camera access is not supported.");
+      return;
+    }
+
+    video.style.display = "block";
+
+    if (Quagga.initialized) Quagga.stop();
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: video,
+        constraints: { facingMode: "environment" }
+      },
+      decoder: {
+        readers: ["code_128_reader", "code_39_reader", "pdf417_reader"]
+      },
+      locate: true
+    }, function(err) {
+      if (err) {
+        console.error(err);
+        alert("Camera initialization failed. Please check browser permissions and make sure you allowed access to the camera on this page.");
+        video.style.display = "none";
+        return;
+      }
+      Quagga.initialized = true;
+      Quagga.start();
     });
-  } else {
-    scannerContainer.style.display = "none";
-  }
-}
 
-scannerClose.addEventListener("click", stopScanner);
-
-// Handle login with Enter key
-document.getElementById("loginPass").addEventListener("keyup", function(event) {
-  if (event.key === "Enter") {
-    checkLogin();
-  }
-});
-
-// Enable debug mode for troubleshooting
-debugInfo.style.display = "block";
+    Quagga.onDetected(function(result) {
+      const code = result.codeResult.code;
+      if (code.length >= 8) {
+        vin.value = code.slice(-8).toUpperCase();
+        Quagga.stop();
+        video.style.display = "none";
+      }
+    });
+  });
 </script>
 </body>
 </html>
