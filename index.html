@@ -58,7 +58,8 @@
     }
     
     input[type="text"]#vin,
-    input[type="text"]#initials {
+    input[type="text"]#initials,
+    textarea#billTo {
       text-transform: uppercase;
     }
     
@@ -166,12 +167,6 @@
       100% { transform: rotate(360deg); }
     }
     
-    .ford-logo {
-      display: block;
-      margin: 0 auto 20px;
-      max-width: 180px;
-    }
-    
     .button-group {
       display: flex;
       gap: 10px;
@@ -202,7 +197,6 @@
 </script>
 </head>
 <body>
-<img src="https://upload.wikimedia.org/wikipedia/commons/a/a0/Ford_Motor_Company_Logo.svg" alt="Ford Logo" class="ford-logo">
 <h1>Midway Ford Fuel Slip</h1>
 
 <div id="loginScreen" class="card visible">
@@ -228,7 +222,7 @@
   </div>
   
   <label for="vin">VIN (Last 8 Characters or Full VIN):</label>
-  <input type="text" id="vin" required />
+  <input type="text" id="vin" maxlength="17" required />
   <button type="button" id="scanBtn">Scan VIN Barcode</button>
   
   <div id="scanner-container">
@@ -366,9 +360,9 @@
     if (vinValue.length > 8) {
       // If it's longer than 8 chars, it might be a full VIN
       // Extract the last 8 characters
-      this.value = vinValue.slice(-8);
+      this.value = vinValue.slice(-8).toUpperCase();
     } else {
-      this.value = vinValue;
+      this.value = vinValue.toUpperCase();
     }
   });
 
@@ -380,7 +374,7 @@
     confUsed.textContent = used.value;
     confDate.textContent = date.value;
     confStation.textContent = station.value;
-    confBillTo.textContent = billTo.value;
+    confBillTo.textContent = billTo.value.toUpperCase();
     confUser.textContent = initials.value.toUpperCase();
     fuelForm.classList.remove("visible");
     confirmationPage.classList.add("visible");
@@ -397,7 +391,7 @@
     data.append("gallonsUsed", used.value);
     data.append("date", date.value);
     data.append("station", station.value);
-    data.append("billTo", billTo.value.trim());
+    data.append("billTo", billTo.value.trim().toUpperCase());
     data.append("initials", initials.value.trim().toUpperCase());
 
     try {
@@ -413,24 +407,29 @@
       cUsed.textContent = used.value;
       cDate.textContent = date.value;
       cStation.textContent = station.value;
-      cBillTo.textContent = billTo.value;
+      cBillTo.textContent = billTo.value.toUpperCase();
       cUser.textContent = initials.value.toUpperCase();
 
       confirmationPage.classList.remove("visible");
       
       // Send Email via EmailJS
-      await emailjs.send("service_jbw2q2o", "template_azb4var", {
-        vin: vin.value.trim().toUpperCase(),
-        startGallons: start.value,
-        endGallons: end.value,
-        gallonsUsed: used.value,
-        date: date.value,
-        station: station.value,
-        billTo: billTo.value.trim(),
-        initials: initials.value.trim().toUpperCase()
-      });
+      try {
+        await emailjs.send("service_jbw2q2o", "template_azb4var", {
+          vin: vin.value.trim().toUpperCase(),
+          startGallons: start.value,
+          endGallons: end.value,
+          gallonsUsed: used.value,
+          date: date.value,
+          station: station.value,
+          billTo: billTo.value.trim().toUpperCase(),
+          initials: initials.value.trim().toUpperCase()
+        });
+      } catch (emailError) {
+        console.error("EmailJS error:", emailError);
+        // Continue even if email fails - data is already saved to sheet
+      }
       
-      // Hide loading spinner
+      // Hide loading spinner and show confirmation
       loadingOverlay.style.display = "none";
       finalConfirmation.classList.add("visible");
     } catch (error) {
