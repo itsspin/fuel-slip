@@ -137,7 +137,7 @@
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script>
-  emailjs.init("testing");
+  emailjs.init("test");
 </script>
 </head>
 <body>
@@ -316,34 +316,22 @@
     try {
       loadingOverlay.style.display = "flex";
       
+      // Create form data object with explicit string conversions
       const formData = {
-        vin: vin.value.trim().toUpperCase(),
-        station: station.value,
-        startGallons: start.value,
-        endGallons: end.value,
-        gallonsUsed: used.value,
-        billTo: billTo.value || "N/A",
-        date: date.value,
-        initials: initials.value.trim().toUpperCase()
+        vin: String(vin.value.trim().toUpperCase()),
+        station: String(station.value),
+        startGallons: String(start.value),
+        endGallons: String(end.value),
+        gallonsUsed: String(used.value),
+        billTo: String(billTo.value || "N/A"),
+        date: String(date.value),
+        initials: String(initials.value.trim().toUpperCase())
       };
       
       logDebug("Form data prepared: " + JSON.stringify(formData));
       
-      // Create form data for direct POST
-      const formDataObj = new FormData();
-      Object.keys(formData).forEach(key => {
-        formDataObj.append(key, formData[key]);
-      });
-      
-      // Submit to Google Apps Script
+      // Submit to Google Apps Script using fetch with form-urlencoded
       const scriptUrl = "https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec";
-      
-      logDebug("Submitting to Google Apps Script");
-      
-      // Use XMLHttpRequest which works better with Google Apps Script
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", scriptUrl, true);
-      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
       
       // Convert form data to URL encoded string
       const urlEncodedData = Object.keys(formData)
@@ -352,52 +340,50 @@
       
       logDebug("URL encoded data: " + urlEncodedData);
       
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
-          logDebug(`Google Apps Script response status: ${xhr.status}`);
-          
-          if (xhr.responseText) {
-            logDebug("Response: " + xhr.responseText);
-          }
-          
-          // Continue regardless of response since Google Apps Script might return various status codes
-          // Update confirmation screen
-          cVin.textContent = formData.vin;
-          cStation.textContent = formData.station;
-          cStart.textContent = formData.startGallons;
-          cEnd.textContent = formData.endGallons;
-          cUsed.textContent = formData.gallonsUsed;
-          cBillTo.textContent = formData.billTo;
-          cDate.textContent = formData.date;
-          cUser.textContent = formData.initials;
-          
-          // Send Email via EmailJS
-          emailjs.send("service_jbw2q2o", "template_azb4var", formData)
-            .then(() => {
-              logDebug("Email sent successfully");
-              confirmationPage.classList.remove("visible");
-              finalConfirmation.classList.add("visible");
-              loadingOverlay.style.display = "none";
-            })
-            .catch(error => {
-              logDebug("EmailJS error: " + JSON.stringify(error));
-              // Continue even if email fails
-              confirmationPage.classList.remove("visible");
-              finalConfirmation.classList.add("visible");
-              loadingOverlay.style.display = "none";
-            });
-        }
-      };
-      
-      xhr.onerror = function() {
-        logDebug("XHR error occurred");
-        // Continue even if there's an error
-        confirmationPage.classList.remove("visible");
-        finalConfirmation.classList.add("visible");
+      // Use fetch with POST and form-urlencoded
+      fetch(scriptUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: urlEncodedData,
+        mode: 'no-cors' // Required for Google Apps Script
+      })
+      .then(() => {
+        logDebug("Form submitted successfully");
+        
+        // Update confirmation screen
+        cVin.textContent = formData.vin;
+        cStation.textContent = formData.station;
+        cStart.textContent = formData.startGallons;
+        cEnd.textContent = formData.endGallons;
+        cUsed.textContent = formData.gallonsUsed;
+        cBillTo.textContent = formData.billTo;
+        cDate.textContent = formData.date;
+        cUser.textContent = formData.initials;
+        
+        // Send Email via EmailJS
+        emailjs.send("service_jbw2q2o", "template_azb4var", formData)
+          .then(() => {
+            logDebug("Email sent successfully");
+            confirmationPage.classList.remove("visible");
+            finalConfirmation.classList.add("visible");
+          })
+          .catch(error => {
+            logDebug("EmailJS error: " + JSON.stringify(error));
+            // Continue even if email fails
+            confirmationPage.classList.remove("visible");
+            finalConfirmation.classList.add("visible");
+          })
+          .finally(() => {
+            loadingOverlay.style.display = "none";
+          });
+      })
+      .catch(error => {
+        logDebug("Fetch error: " + error.message);
+        alert("There was an error submitting your form. Please try again.");
         loadingOverlay.style.display = "none";
-      };
-      
-      xhr.send(urlEncodedData);
+      });
       
     } catch (error) {
       logDebug("Error in form submission: " + error.message);
