@@ -103,33 +103,72 @@
     }
     
     #scanner-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 1000;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    #scanner-wrapper {
       position: relative;
       width: 100%;
-      margin-top: 1rem;
-      display: none;
+      max-width: 600px;
+      margin: 0 auto;
     }
     
     #scanner {
       width: 100%;
-      border-radius: 8px;
-      border: 2px solid var(--ford-blue);
+      height: 100%;
+      display: block;
+    }
+    
+    #scan-region {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 150px;
+      border: 2px solid #fff;
+      border-radius: 10px;
+      box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.5);
+      z-index: 1;
     }
     
     #close-scanner {
       position: absolute;
-      top: 8px;
-      right: 8px;
-      background: rgba(255,255,255,0.9);
+      top: 20px;
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      background: rgba(255, 255, 255, 0.8);
       color: var(--ford-blue);
-      width: 32px;
-      height: 32px;
-      font-size: 20px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 24px;
       cursor: pointer;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 2;
+    }
+    
+    #scanner-instructions {
+      position: absolute;
+      bottom: 40px;
+      left: 0;
+      width: 100%;
+      color: white;
+      text-align: center;
+      padding: 10px;
+      font-size: 16px;
+      z-index: 2;
     }
     
     .loading-overlay {
@@ -224,11 +263,6 @@
   <label for="vin">VIN (Last 8 Characters or Full VIN):</label>
   <input type="text" id="vin" maxlength="17" required />
   <button type="button" id="scanBtn">Scan VIN Barcode</button>
-  
-  <div id="scanner-container">
-    <div id="close-scanner">×</div>
-    <video id="scanner" autoplay muted playsinline></video>
-  </div>
 
   <label for="startGallons">Start Gallons:</label>
   <input type="number" id="startGallons" step="0.1" required />
@@ -285,18 +319,31 @@
   </div>
 </div>
 
+<div id="scanner-container">
+  <div id="scanner-wrapper">
+    <video id="scanner"></video>
+    <div id="scan-region"></div>
+    <div id="scanner-instructions">Position the VIN barcode within the frame</div>
+  </div>
+  <div id="close-scanner">×</div>
+</div>
+
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner"></div>
   <div class="loading-text">Submitting fuel slip...</div>
 </div>
 
-<script src="https://unpkg.com/@ericblade/quagga2@1.2.6/dist/quagga.min.js"></script>
+<!-- Include the ZXing library for improved barcode scanning -->
+<script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+
 <script>
   const loginScreen = document.getElementById("loginScreen");
   const fuelForm = document.getElementById("fuelForm");
   const confirmationPage = document.getElementById("confirmationPage");
   const finalConfirmation = document.getElementById("finalConfirmation");
   const loadingOverlay = document.getElementById("loadingOverlay");
+  const scannerContainer = document.getElementById("scanner-container");
+  const closeScanner = document.getElementById("close-scanner");
 
   const vin = document.getElementById("vin");
   const start = document.getElementById("startGallons");
@@ -452,114 +499,98 @@
     fuelForm.classList.add("visible");
   }
 
-  // Improved barcode scanner with HTML5 camera support
-  const scannerContainer = document.getElementById("scanner-container");
-  const scanner = document.getElementById("scanner");
-  const scanBtn = document.getElementById("scanBtn");
-  const closeScanner = document.getElementById("close-scanner");
-  
-  scanBtn.addEventListener("click", startScanner);
+  // Improved barcode scanner using ZXing
+  let codeReader;
+  let selectedDeviceId;
+  let scanning = false;
+
+  document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
 
-  let stream = null;
-
-  function startScanner() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert("Camera access is not supported by this browser.");
-      return;
-    }
-
-    scannerContainer.style.display = "block";
-    
-    // Stop any existing streams
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-
-    navigator.mediaDevices.getUserMedia({ 
-      video: { 
-        facingMode: "environment",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
-    })
-    .then(function(mediaStream) {
-      stream = mediaStream;
-      scanner.srcObject = mediaStream;
-      scanner.play();
+  async function startScanner() {
+    try {
+      scannerContainer.style.display = "flex";
+      codeReader = new ZXing.BrowserMultiFormatReader();
       
-      if (Quagga.initialized) {
-        Quagga.stop();
+      const videoElement = document.getElementById('scanner');
+      
+      // List available video input devices
+      const videoInputDevices = await codeReader.listVideoInputDevices();
+      
+      if (videoInputDevices.length === 0) {
+        alert('No camera devices found');
+        stopScanner();
+        return;
+      }
+      
+      // Try to select the back camera (usually best for scanning)
+      selectedDeviceId = undefined;  // Default to system selection
+      
+      // Look for a back camera
+      for (const device of videoInputDevices) {
+        if (device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('rear')) {
+          selectedDeviceId = device.deviceId;
+          break;
+        }
+      }
+      
+      // If no back camera, use the first one
+      if (!selectedDeviceId && videoInputDevices.length > 0) {
+        selectedDeviceId = videoInputDevices[0].deviceId;
       }
 
-      Quagga.init({
-        inputStream: {
-          name: "Live",
-          type: "LiveStream",
-          target: scanner,
-          constraints: {
-            width: { min: 640 },
-            height: { min: 480 },
-            facingMode: "environment",
-            aspectRatio: { min: 1, max: 2 }
-          }
-        },
-        locator: {
-          patchSize: "medium",
-          halfSample: true
-        },
-        numOfWorkers: navigator.hardwareConcurrency || 4,
-        decoder: {
-          readers: [
-            "code_128_reader",
-            "code_39_reader",
-            "ean_reader",
-            "ean_8_reader",
-            "code_93_reader"
-          ]
-        },
-        locate: true
-      }, function(err) {
-        if (err) {
-          console.error("Scanner initialization error:", err);
-          alert("Camera initialization failed. Please check browser permissions.");
-          stopScanner();
-          return;
-        }
-        Quagga.initialized = true;
-        Quagga.start();
-      });
-
-      Quagga.onDetected(function(result) {
-        const code = result.codeResult.code;
-        console.log("Barcode detected:", code);
+      // Start decoding from the selected camera
+      scanning = true;
+      codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement, (result, error) => {
+        if (!scanning) return;
         
-        // For VIN, we need the last 8 characters
-        if (code && code.length >= 8) {
-          vin.value = code.slice(-8).toUpperCase();
-          stopScanner();
+        if (result) {
+          console.log('Barcode detected:', result.getText());
+          const code = result.getText();
+          
+          // For VIN, we need the last 8 characters
+          if (code && code.length >= 8) {
+            vin.value = code.slice(-8).toUpperCase();
+            stopScanner();
+          }
+        }
+        
+        if (error && !(error instanceof ZXing.NotFoundException)) {
+          console.error('Scanner error:', error);
         }
       });
-    })
-    .catch(function(err) {
-      console.error("Camera access error:", err);
-      alert("Camera access was denied. Please check your browser permissions.");
+      
+    } catch (err) {
+      console.error('Scanner initialization error:', err);
+      alert('Failed to start the barcode scanner. Please check your camera permissions.');
       stopScanner();
-    });
+    }
   }
 
   function stopScanner() {
+    scanning = false;
     scannerContainer.style.display = "none";
     
-    if (Quagga.initialized) {
-      Quagga.stop();
-    }
-    
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      stream = null;
+    if (codeReader) {
+      codeReader.reset();
+      codeReader = undefined;
     }
   }
+
+  // Handle closing the scanner if the user clicks outside the scanning area
+  scannerContainer.addEventListener("click", function(e) {
+    if (e.target === scannerContainer) {
+      stopScanner();
+    }
+  });
+
+  // Handle keyboard events to close scanner with Escape key
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape" && scanning) {
+      stopScanner();
+    }
+  });
 </script>
 </body>
 </html>
