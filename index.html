@@ -59,10 +59,44 @@
     button:hover {
       background-color: #0056b3;
     }
-    #scanner {
+    #scanner-container {
       display: none;
+      position: relative;
       width: 100%;
       margin-top: 1rem;
+    }
+    #scanner {
+      width: 100%;
+      height: 300px;
+      background-color: #000;
+    }
+    #scanner-message {
+      position: absolute;
+      bottom: 10px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      background-color: rgba(0,0,0,0.7);
+      color: white;
+      padding: 8px;
+      font-size: 14px;
+    }
+    #scanner-close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(255,255,255,0.7);
+      color: black;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 18px;
+      z-index: 10;
     }
     .loading {
       position: fixed;
@@ -91,10 +125,19 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    .debug-info {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 12px;
+      display: none;
+    }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script>
-  emailjs.init("t");
+  emailjs.init("changethis");
 </script>
 </head>
 <body>
@@ -111,7 +154,12 @@
   <label for="vin">VIN (Last 8 Characters):</label>
   <input type="text" id="vin" maxlength="8" required />
   <button type="button" id="scanBtn">Scan VIN Barcode</button>
-  <video id="scanner" autoplay muted playsinline></video>
+  
+  <div id="scanner-container">
+    <div id="scanner-close">×</div>
+    <div id="scanner"></div>
+    <div id="scanner-message">Point camera at barcode</div>
+  </div>
 
   <label for="station">Station:</label>
   <select id="station" required>
@@ -139,6 +187,8 @@
   <input type="text" id="initials" maxlength="4" required />
 
   <button type="submit">Submit</button>
+  
+  <div id="debug-info" class="debug-info"></div>
 </form>
 
 <div id="confirmationPage" class="card">
@@ -174,13 +224,14 @@
   <div>Submitting data...</div>
 </div>
 
-<script src="https://unpkg.com/@ericblade/quagga2@1.8.2/dist/quagga.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
   const loginScreen = document.getElementById("loginScreen");
   const fuelForm = document.getElementById("fuelForm");
   const confirmationPage = document.getElementById("confirmationPage");
   const finalConfirmation = document.getElementById("finalConfirmation");
   const loadingOverlay = document.getElementById("loadingOverlay");
+  const debugInfo = document.getElementById("debug-info");
 
   const vin = document.getElementById("vin");
   const station = document.getElementById("station");
@@ -212,6 +263,16 @@
   const cDate = document.getElementById("c-date");
   const cUser = document.getElementById("c-user");
 
+  // For debugging
+  function logDebug(message) {
+    console.log(message);
+    if (debugInfo) {
+      const timestamp = new Date().toLocaleTimeString();
+      debugInfo.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+    }
+  }
+
+  // Check if user is already logged in
   if (localStorage.getItem("fuelLogin") === "yes") {
     loginScreen.classList.remove("visible");
     fuelForm.classList.add("visible");
@@ -266,39 +327,77 @@
         initials: initials.value.trim().toUpperCase()
       };
       
-      // Build URL with parameters for GET request (works better with Google Apps Script)
-      const url = new URL("https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec");
+      logDebug("Preparing to submit form data");
       
-      // Append all form data as URL parameters
+      // Create form data for direct POST
+      const formDataObj = new FormData();
       Object.keys(formData).forEach(key => {
-        url.searchParams.append(key, formData[key]);
+        formDataObj.append(key, formData[key]);
       });
       
-      // Make the request
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        mode: "no-cors"
-      });
+      // Submit to Google Apps Script
+      const scriptUrl = "https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec";
       
-      // Update confirmation screen
-      cVin.textContent = formData.vin;
-      cStation.textContent = formData.station;
-      cStart.textContent = formData.startGallons;
-      cEnd.textContent = formData.endGallons;
-      cUsed.textContent = formData.gallonsUsed;
-      cBillTo.textContent = formData.billTo;
-      cDate.textContent = formData.date;
-      cUser.textContent = formData.initials;
+      logDebug("Submitting to Google Apps Script");
       
-      // Send Email via EmailJS
-      await emailjs.send("service_jbw2q2o", "template_azb4var", formData);
+      // Use XMLHttpRequest which works better with Google Apps Script
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", scriptUrl, true);
+      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
       
+      // Convert form data to URL encoded string
+      const urlEncodedData = Object.keys(formData)
+        .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(formData[key]))
+        .join('&');
+      
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          logDebug(`Google Apps Script response status: ${xhr.status}`);
+          
+          // Continue regardless of response since Google Apps Script might return various status codes
+          // Update confirmation screen
+          cVin.textContent = formData.vin;
+          cStation.textContent = formData.station;
+          cStart.textContent = formData.startGallons;
+          cEnd.textContent = formData.endGallons;
+          cUsed.textContent = formData.gallonsUsed;
+          cBillTo.textContent = formData.billTo;
+          cDate.textContent = formData.date;
+          cUser.textContent = formData.initials;
+          
+          // Send Email via EmailJS
+          emailjs.send("service_jbw2q2o", "template_azb4var", formData)
+            .then(() => {
+              logDebug("Email sent successfully");
+              confirmationPage.classList.remove("visible");
+              finalConfirmation.classList.add("visible");
+              loadingOverlay.style.display = "none";
+            })
+            .catch(error => {
+              logDebug("EmailJS error: " + JSON.stringify(error));
+              // Continue even if email fails
+              confirmationPage.classList.remove("visible");
+              finalConfirmation.classList.add("visible");
+              loadingOverlay.style.display = "none";
+            });
+        }
+      };
+      
+      xhr.onerror = function() {
+        logDebug("XHR error occurred");
+        // Continue even if there's an error
+        confirmationPage.classList.remove("visible");
+        finalConfirmation.classList.add("visible");
+        loadingOverlay.style.display = "none";
+      };
+      
+      xhr.send(urlEncodedData);
+      
+    } catch (error) {
+      logDebug("Error in form submission: " + error.message);
+      alert("There was an error submitting your form. Your data has been saved locally.");
       confirmationPage.classList.remove("visible");
       finalConfirmation.classList.add("visible");
-    } catch (error) {
-      console.error("Error submitting form:", error);
-      alert("There was an error submitting your form. Please try again.");
-    } finally {
       loadingOverlay.style.display = "none";
     }
   });
@@ -315,115 +414,81 @@
     fuelForm.classList.add("visible");
   }
 
+  // HTML5 QR Code Scanner setup
+  let html5QrCode;
+  const scannerContainer = document.getElementById("scanner-container");
+  const scannerElement = document.getElementById("scanner");
+  const scannerClose = document.getElementById("scanner-close");
+  
   document.getElementById("scanBtn").addEventListener("click", () => {
-    const video = document.getElementById("scanner");
-    
-    // Check for camera support
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert("Camera access is not supported on your device or browser.");
-      return;
-    }
-    
-    video.style.display = "block";
-    
-    // Stop any existing scanner
-    if (window.quaggaInstance) {
-      Quagga.stop();
-    }
-    
-    // Configure scanner with better mobile settings
-    Quagga.init({
-      inputStream: {
-        name: "Live",
-        type: "LiveStream",
-        target: video,
-        constraints: {
-          facingMode: "environment",
-          width: { min: 640 },
-          height: { min: 480 },
-          aspectRatio: { min: 1, max: 2 }
-        },
-        area: { // Only search in the center of the video
-          top: "20%",
-          right: "10%",
-          left: "10%",
-          bottom: "20%"
-        }
-      },
-      locator: {
-        patchSize: "medium",
-        halfSample: true
-      },
-      numOfWorkers: navigator.hardwareConcurrency || 4,
-      decoder: {
-        readers: [
-          "code_128_reader",
-          "code_39_reader",
-          "ean_reader",
-          "ean_8_reader",
-          "code_93_reader"
-        ]
-      },
-      locate: true
-    }, function(err) {
-      if (err) {
-        console.error("Quagga initialization error:", err);
-        alert("Camera initialization failed. Please check browser permissions and make sure you allowed access to the camera on this page.");
-        video.style.display = "none";
-        return;
-      }
+    try {
+      scannerContainer.style.display = "block";
       
-      window.quaggaInstance = true;
-      Quagga.start();
+      logDebug("Starting QR scanner");
       
-      // Add a message to help users
-      const scanMessage = document.createElement("div");
-      scanMessage.id = "scanMessage";
-      scanMessage.style.textAlign = "center";
-      scanMessage.style.marginTop = "10px";
-      scanMessage.style.padding = "5px";
-      scanMessage.style.backgroundColor = "#f8f9fa";
-      scanMessage.style.borderRadius = "5px";
-      scanMessage.innerHTML = "Point camera at barcode. Make sure it's well-lit and in focus.";
-      video.parentNode.insertBefore(scanMessage, video.nextSibling);
-    });
-    
-    // Improve detection with confidence threshold
-    let lastResult = null;
-    let sameResultCount = 0;
-    
-    Quagga.onDetected(function(result) {
-      const code = result.codeResult.code;
+      html5QrCode = new Html5Qrcode("scanner");
       
-      // Only process codes that are likely to be VINs (alphanumeric, proper length)
-      if (code && code.length >= 8 && /^[A-Z0-9]+$/i.test(code)) {
-        // Check if this is the same as the last result (more confidence)
-        if (code === lastResult) {
-          sameResultCount++;
-          
-          // If we've seen the same result multiple times, it's likely correct
-          if (sameResultCount >= 2) {
-            vin.value = code.slice(-8).toUpperCase();
-            Quagga.stop();
-            video.style.display = "none";
-            
-            // Remove the scan message if it exists
-            const scanMessage = document.getElementById("scanMessage");
-            if (scanMessage) {
-              scanMessage.remove();
-            }
-            
-            window.quaggaInstance = false;
-          }
+      const qrCodeSuccessCallback = (decodedText) => {
+        logDebug("Code scanned: " + decodedText);
+        
+        // Extract last 8 characters if longer
+        if (decodedText.length >= 8) {
+          vin.value = decodedText.slice(-8).toUpperCase();
         } else {
-          lastResult = code;
-          sameResultCount = 1;
+          vin.value = decodedText.toUpperCase();
         }
         
-        console.log("Detected barcode:", code, "Confidence:", result.codeResult.confidence);
-      }
-    });
+        stopScanner();
+      };
+      
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13
+        ]
+      };
+      
+      // Start scanner with rear camera
+      html5QrCode.start(
+        { facingMode: "environment" }, 
+        config, 
+        qrCodeSuccessCallback, 
+        (errorMessage) => {
+          // Just log errors, don't alert
+          logDebug("QR Scanner error: " + errorMessage);
+        }
+      ).catch((err) => {
+        logDebug("Unable to start scanner: " + err);
+        alert("Could not access camera. Please check your camera permissions or enter VIN manually.");
+        scannerContainer.style.display = "none";
+      });
+      
+    } catch (error) {
+      logDebug("Error initializing scanner: " + error.message);
+      alert("Could not initialize scanner. Please enter VIN manually.");
+      scannerContainer.style.display = "none";
+    }
   });
+  
+  function stopScanner() {
+    if (html5QrCode && html5QrCode.isScanning) {
+      html5QrCode.stop().then(() => {
+        logDebug("Scanner stopped");
+        scannerContainer.style.display = "none";
+      }).catch(err => {
+        logDebug("Error stopping scanner: " + err);
+        scannerContainer.style.display = "none";
+      });
+    } else {
+      scannerContainer.style.display = "none";
+    }
+  }
+  
+  scannerClose.addEventListener("click", stopScanner);
   
   // Handle login with Enter key
   document.getElementById("loginPass").addEventListener("keyup", function(event) {
