@@ -134,12 +134,6 @@
       font-size: 12px;
       display: block; /* Show debug info by default */
     }
-    #hidden-form {
-      display: none;
-    }
-    #submit-iframe {
-      display: none;
-    }
   </style>
 </head>
 <body>
@@ -226,21 +220,6 @@
   <div>Submitting data...</div>
 </div>
 
-<!-- Hidden form for submission -->
-<form id="hidden-form" target="submit-iframe" method="GET">
-  <input type="hidden" name="vin" id="hidden-vin">
-  <input type="hidden" name="station" id="hidden-station">
-  <input type="hidden" name="startGallons" id="hidden-startGallons">
-  <input type="hidden" name="endGallons" id="hidden-endGallons">
-  <input type="hidden" name="gallonsUsed" id="hidden-gallonsUsed">
-  <input type="hidden" name="billTo" id="hidden-billTo">
-  <input type="hidden" name="date" id="hidden-date">
-  <input type="hidden" name="initials" id="hidden-initials">
-</form>
-
-<!-- Hidden iframe to receive response -->
-<iframe name="submit-iframe" id="submit-iframe"></iframe>
-
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
   const loginScreen = document.getElementById("loginScreen");
@@ -249,8 +228,6 @@
   const finalConfirmation = document.getElementById("finalConfirmation");
   const loadingOverlay = document.getElementById("loadingOverlay");
   const debugInfo = document.getElementById("debug-info");
-  const hiddenForm = document.getElementById("hidden-form");
-  const submitIframe = document.getElementById("submit-iframe");
 
   const vin = document.getElementById("vin");
   const station = document.getElementById("station");
@@ -260,16 +237,6 @@
   const billTo = document.getElementById("billTo");
   const date = document.getElementById("date");
   const initials = document.getElementById("initials");
-
-  // Hidden form fields
-  const hiddenVin = document.getElementById("hidden-vin");
-  const hiddenStation = document.getElementById("hidden-station");
-  const hiddenStart = document.getElementById("hidden-startGallons");
-  const hiddenEnd = document.getElementById("hidden-endGallons");
-  const hiddenUsed = document.getElementById("hidden-gallonsUsed");
-  const hiddenBillTo = document.getElementById("hidden-billTo");
-  const hiddenDate = document.getElementById("hidden-date");
-  const hiddenInitials = document.getElementById("hidden-initials");
 
   const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
   date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
@@ -291,10 +258,6 @@
   const cBillTo = document.getElementById("c-billTo");
   const cDate = document.getElementById("c-date");
   const cUser = document.getElementById("c-user");
-
-  // Set the Google Apps Script URL
-  const scriptUrl = "https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec";
-  hiddenForm.action = scriptUrl;
 
   // For debugging
   function logDebug(message) {
@@ -345,52 +308,71 @@
     confirmationPage.classList.add("visible");
   });
 
-  // Listen for iframe load event
-  submitIframe.addEventListener('load', function() {
-    try {
-      logDebug("Form submitted, iframe loaded");
-      
-      // Update confirmation screen
-      cVin.textContent = vin.value.toUpperCase();
-      cStation.textContent = station.value;
-      cStart.textContent = start.value;
-      cEnd.textContent = end.value;
-      cUsed.textContent = used.value;
-      cBillTo.textContent = billTo.value || "N/A";
-      cDate.textContent = date.value;
-      cUser.textContent = initials.value.toUpperCase();
-      
-      // Show final confirmation
-      confirmationPage.classList.remove("visible");
-      finalConfirmation.classList.add("visible");
-      loadingOverlay.style.display = "none";
-      
-      logDebug("Submission complete");
-    } catch (error) {
-      logDebug("Error in iframe load handler: " + error.message);
-      loadingOverlay.style.display = "none";
-    }
-  });
-
   document.getElementById("confirmSubmit").addEventListener("click", () => {
     try {
       loadingOverlay.style.display = "flex";
       
-      // Fill hidden form with values
-      hiddenVin.value = vin.value.trim().toUpperCase();
-      hiddenStation.value = station.value;
-      hiddenStart.value = start.value;
-      hiddenEnd.value = end.value;
-      hiddenUsed.value = used.value;
-      hiddenBillTo.value = billTo.value || "N/A";
-      hiddenDate.value = date.value;
-      hiddenInitials.value = initials.value.trim().toUpperCase();
+      // Create form data object
+      const formData = {
+        vin: vin.value.trim().toUpperCase(),
+        station: station.value,
+        startGallons: start.value,
+        endGallons: end.value,
+        gallonsUsed: used.value,
+        billTo: billTo.value || "N/A",
+        date: date.value,
+        initials: initials.value.trim().toUpperCase()
+      };
       
-      logDebug("Form data prepared for submission");
+      logDebug("Form data prepared: " + JSON.stringify(formData));
       
-      // Submit the hidden form
-      hiddenForm.submit();
-      logDebug("Hidden form submitted");
+      // Submit to Google Apps Script using XMLHttpRequest
+      const scriptUrl = "https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec";
+      
+      // Convert form data to URL encoded string
+      const urlEncodedData = Object.keys(formData)
+        .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(formData[key]))
+        .join('&');
+      
+      logDebug("URL encoded data: " + urlEncodedData);
+      
+      // Use XMLHttpRequest which works better with Google Apps Script
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", scriptUrl, true);
+      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          logDebug(`Response status: ${xhr.status}`);
+          
+          if (xhr.responseText) {
+            logDebug("Response: " + xhr.responseText);
+          }
+          
+          // Update confirmation screen
+          cVin.textContent = formData.vin;
+          cStation.textContent = formData.station;
+          cStart.textContent = formData.startGallons;
+          cEnd.textContent = formData.endGallons;
+          cUsed.textContent = formData.gallonsUsed;
+          cBillTo.textContent = formData.billTo;
+          cDate.textContent = formData.date;
+          cUser.textContent = formData.initials;
+          
+          // Show final confirmation
+          confirmationPage.classList.remove("visible");
+          finalConfirmation.classList.add("visible");
+          loadingOverlay.style.display = "none";
+        }
+      };
+      
+      xhr.onerror = function() {
+        logDebug("XHR error occurred");
+        alert("There was an error submitting your form. Please try again.");
+        loadingOverlay.style.display = "none";
+      };
+      
+      xhr.send(urlEncodedData);
       
     } catch (error) {
       logDebug("Error in form submission: " + error.message);
