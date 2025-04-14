@@ -132,12 +132,12 @@
       border: 1px solid #ddd;
       border-radius: 5px;
       font-size: 12px;
-      display: none;
+      display: block; /* Show debug info by default */
     }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script>
-  emailjs.init("test");
+  emailjs.init("trr");
 </script>
 </head>
 <body>
@@ -330,60 +330,59 @@
       
       logDebug("Form data prepared: " + JSON.stringify(formData));
       
-      // Submit to Google Apps Script using fetch with form-urlencoded
+      // Submit to Google Apps Script using GET method
       const scriptUrl = "https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec";
       
-      // Convert form data to URL encoded string
-      const urlEncodedData = Object.keys(formData)
+      // Convert form data to URL query parameters
+      const queryParams = Object.keys(formData)
         .map(key => encodeURIComponent(key) + '=' + encodeURIComponent(formData[key]))
         .join('&');
       
-      logDebug("URL encoded data: " + urlEncodedData);
+      const fullUrl = scriptUrl + '?' + queryParams;
       
-      // Use fetch with POST and form-urlencoded
-      fetch(scriptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: urlEncodedData,
-        mode: 'no-cors' // Required for Google Apps Script
-      })
-      .then(() => {
-        logDebug("Form submitted successfully");
-        
-        // Update confirmation screen
-        cVin.textContent = formData.vin;
-        cStation.textContent = formData.station;
-        cStart.textContent = formData.startGallons;
-        cEnd.textContent = formData.endGallons;
-        cUsed.textContent = formData.gallonsUsed;
-        cBillTo.textContent = formData.billTo;
-        cDate.textContent = formData.date;
-        cUser.textContent = formData.initials;
-        
-        // Send Email via EmailJS
-        emailjs.send("service_jbw2q2o", "template_azb4var", formData)
-          .then(() => {
-            logDebug("Email sent successfully");
-            confirmationPage.classList.remove("visible");
-            finalConfirmation.classList.add("visible");
-          })
-          .catch(error => {
-            logDebug("EmailJS error: " + JSON.stringify(error));
-            // Continue even if email fails
-            confirmationPage.classList.remove("visible");
-            finalConfirmation.classList.add("visible");
-          })
-          .finally(() => {
-            loadingOverlay.style.display = "none";
-          });
-      })
-      .catch(error => {
-        logDebug("Fetch error: " + error.message);
-        alert("There was an error submitting your form. Please try again.");
-        loadingOverlay.style.display = "none";
-      });
+      logDebug("Full URL: " + fullUrl);
+      
+      // Use fetch with GET method
+      fetch(fullUrl)
+        .then(response => {
+          logDebug("Response status: " + response.status);
+          return response.text();
+        })
+        .then(data => {
+          logDebug("Response data: " + data);
+          
+          // Update confirmation screen
+          cVin.textContent = formData.vin;
+          cStation.textContent = formData.station;
+          cStart.textContent = formData.startGallons;
+          cEnd.textContent = formData.endGallons;
+          cUsed.textContent = formData.gallonsUsed;
+          cBillTo.textContent = formData.billTo;
+          cDate.textContent = formData.date;
+          cUser.textContent = formData.initials;
+          
+          // Send Email via EmailJS
+          emailjs.send("service_jbw2q2o", "template_azb4var", formData)
+            .then(() => {
+              logDebug("Email sent successfully");
+              confirmationPage.classList.remove("visible");
+              finalConfirmation.classList.add("visible");
+            })
+            .catch(error => {
+              logDebug("EmailJS error: " + JSON.stringify(error));
+              // Continue even if email fails
+              confirmationPage.classList.remove("visible");
+              finalConfirmation.classList.add("visible");
+            })
+            .finally(() => {
+              loadingOverlay.style.display = "none";
+            });
+        })
+        .catch(error => {
+          logDebug("Fetch error: " + error.message);
+          alert("There was an error submitting your form. Please try again.");
+          loadingOverlay.style.display = "none";
+        });
       
     } catch (error) {
       logDebug("Error in form submission: " + error.message);
@@ -490,8 +489,7 @@
   });
   
   // Enable debug mode for troubleshooting
-  // Uncomment this line to show debug info
-  // debugInfo.style.display = "block";
+  debugInfo.style.display = "block";
 </script>
 </body>
 </html>
