@@ -134,6 +134,9 @@
     font-size: 12px;
     display: block; /* Show debug info by default */
   }
+  #hidden-iframe {
+    display: none;
+  }
 </style>
 </head>
 <body>
@@ -145,6 +148,21 @@
 <input type="password" id="loginPass" />
 <button type="button" onclick="checkLogin()">Login</button>
 </div>
+
+<!-- This is our actual form that will submit data -->
+<form id="dataForm" target="hidden-iframe" method="GET" action="https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec" style="display:none;">
+  <input type="hidden" name="vin" id="form-vin">
+  <input type="hidden" name="station" id="form-station">
+  <input type="hidden" name="startGallons" id="form-startGallons">
+  <input type="hidden" name="endGallons" id="form-endGallons">
+  <input type="hidden" name="gallonsUsed" id="form-gallonsUsed">
+  <input type="hidden" name="billTo" id="form-billTo">
+  <input type="hidden" name="date" id="form-date">
+  <input type="hidden" name="initials" id="form-initials">
+</form>
+
+<!-- Hidden iframe for form submission -->
+<iframe name="hidden-iframe" id="hidden-iframe"></iframe>
 
 <form id="fuelForm" class="card">
 <label for="vin">VIN (Last 8 Characters):</label>
@@ -228,6 +246,8 @@ const confirmationPage = document.getElementById("confirmationPage");
 const finalConfirmation = document.getElementById("finalConfirmation");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const debugInfo = document.getElementById("debug-info");
+const dataForm = document.getElementById("dataForm");
+const hiddenIframe = document.getElementById("hidden-iframe");
 
 const vin = document.getElementById("vin");
 const station = document.getElementById("station");
@@ -237,6 +257,16 @@ const used = document.getElementById("gallonsUsed");
 const billTo = document.getElementById("billTo");
 const date = document.getElementById("date");
 const initials = document.getElementById("initials");
+
+// Hidden form fields
+const formVin = document.getElementById("form-vin");
+const formStation = document.getElementById("form-station");
+const formStart = document.getElementById("form-startGallons");
+const formEnd = document.getElementById("form-endGallons");
+const formUsed = document.getElementById("form-gallonsUsed");
+const formBillTo = document.getElementById("form-billTo");
+const formDate = document.getElementById("form-date");
+const formInitials = document.getElementById("form-initials");
 
 const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
 date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
@@ -308,77 +338,55 @@ fuelForm.addEventListener("submit", (e) => {
   confirmationPage.classList.add("visible");
 });
 
+// Listen for messages from the iframe
+hiddenIframe.addEventListener('load', function() {
+  logDebug("Form submitted, iframe loaded");
+  
+  // Show final confirmation after a short delay
+  setTimeout(function() {
+    loadingOverlay.style.display = "none";
+    confirmationPage.classList.remove("visible");
+    finalConfirmation.classList.add("visible");
+  }, 1000);
+});
+
 document.getElementById("confirmSubmit").addEventListener("click", () => {
   try {
     loadingOverlay.style.display = "flex";
     
-    // Create form data object with explicit values
-    const formData = new FormData();
-    formData.append("vin", vin.value.trim().toUpperCase());
-    formData.append("station", station.value);
-    formData.append("startGallons", start.value);
-    formData.append("endGallons", end.value);
-    formData.append("gallonsUsed", used.value);
-    formData.append("billTo", billTo.value || "N/A");
-    formData.append("date", date.value);
-    formData.append("initials", initials.value.trim().toUpperCase());
+    // Fill in the hidden form fields
+    formVin.value = vin.value.trim().toUpperCase();
+    formStation.value = station.value;
+    formStart.value = start.value;
+    formEnd.value = end.value;
+    formUsed.value = used.value;
+    formBillTo.value = billTo.value || "N/A";
+    formDate.value = date.value;
+    formInitials.value = initials.value.trim().toUpperCase();
     
-    // Log each value individually for debugging
-    logDebug("Form values:");
-    logDebug("VIN: " + vin.value.trim().toUpperCase());
-    logDebug("Station: " + station.value);
-    logDebug("Start Gallons: " + start.value);
-    logDebug("End Gallons: " + end.value);
-    logDebug("Gallons Used: " + used.value);
-    logDebug("Bill To: " + (billTo.value || "N/A"));
-    logDebug("Date: " + date.value);
-    logDebug("Initials: " + initials.value.trim().toUpperCase());
+    // Log the values being submitted
+    logDebug("Submitting values:");
+    logDebug("VIN: " + formVin.value);
+    logDebug("Station: " + formStation.value);
+    logDebug("Start: " + formStart.value);
+    logDebug("End: " + formEnd.value);
+    logDebug("Used: " + formUsed.value);
+    logDebug("Bill To: " + formBillTo.value);
+    logDebug("Date: " + formDate.value);
+    logDebug("Initials: " + formInitials.value);
     
-    // Create URL search params for GET request
-    const params = new URLSearchParams();
-    params.append("vin", vin.value.trim().toUpperCase());
-    params.append("station", station.value);
-    params.append("startGallons", start.value);
-    params.append("endGallons", end.value);
-    params.append("gallonsUsed", used.value);
-    params.append("billTo", billTo.value || "N/A");
-    params.append("date", date.value);
-    params.append("initials", initials.value.trim().toUpperCase());
+    // Update confirmation screen
+    cVin.textContent = formVin.value;
+    cStation.textContent = formStation.value;
+    cStart.textContent = formStart.value;
+    cEnd.textContent = formEnd.value;
+    cUsed.textContent = formUsed.value;
+    cBillTo.textContent = formBillTo.value;
+    cDate.textContent = formDate.value;
+    cUser.textContent = formInitials.value;
     
-    // Submit to Google Apps Script using fetch API with GET method
-    const scriptUrl = "https://script.google.com/macros/s/AKfycbwBvsMzilVUDgpWQjmk94EoDj2xUFQNoq0GzEHHBRU3F2RqhgX98pAvITpV04JhMbD_/exec";
-    const fullUrl = `${scriptUrl}?${params.toString()}`;
-    
-    logDebug("Submitting to URL: " + fullUrl);
-    
-    fetch(fullUrl)
-      .then(response => {
-        logDebug("Response status: " + response.status);
-        return response.text();
-      })
-      .then(data => {
-        logDebug("Response data: " + data);
-        
-        // Update confirmation screen
-        cVin.textContent = vin.value.trim().toUpperCase();
-        cStation.textContent = station.value;
-        cStart.textContent = start.value;
-        cEnd.textContent = end.value;
-        cUsed.textContent = used.value;
-        cBillTo.textContent = billTo.value || "N/A";
-        cDate.textContent = date.value;
-        cUser.textContent = initials.value.trim().toUpperCase();
-        
-        // Show final confirmation
-        confirmationPage.classList.remove("visible");
-        finalConfirmation.classList.add("visible");
-        loadingOverlay.style.display = "none";
-      })
-      .catch(error => {
-        logDebug("Error: " + error.message);
-        alert("There was an error submitting your form. Please try again.");
-        loadingOverlay.style.display = "none";
-      });
+    // Submit the form
+    dataForm.submit();
     
   } catch (error) {
     logDebug("Error in form submission: " + error.message);
