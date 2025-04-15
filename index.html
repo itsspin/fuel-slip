@@ -122,30 +122,15 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
     
-    /* iOS-optimized video element */
     #scanner {
       position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(1); /* iOS cameras don't need mirroring */
-      -webkit-transform: scaleX(1);
-    }
-    
-    /* Ensure proper iOS support for fullscreen */
-    @supports (-webkit-touch-callout: none) {
-      #scanner {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-      }
     }
     
     #scan-overlay {
@@ -187,7 +172,6 @@
       font-weight: bold;
       cursor: pointer;
       z-index: 3;
-      /* Fix iOS touch delay */
       -webkit-tap-highlight-color: transparent;
     }
     
@@ -205,7 +189,6 @@
       text-shadow: 0 0 10px rgba(0,0,0,0.8);
     }
     
-    /* Scanner status indicator */
     #scan-status {
       position: absolute;
       top: 20px;
@@ -288,20 +271,46 @@
       background-color: var(--ford-gray);
     }
     
-    /* iOS specific fixes */
-    @supports (-webkit-touch-callout: none) {
-      /* iOS form controls */
-      input, select, button {
-        font-size: 16px; /* Prevent zoom on focus */
-      }
-      
-      /* Prevent elastic scrolling */
-      html, body {
-        position: fixed;
-        width: 100%;
-        height: 100%;
-        overflow: auto;
-      }
+    /* Manual scanner mode for when ZXing fails */
+    #manual-scan-container {
+      position: absolute;
+      bottom: 140px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      z-index: 3;
+    }
+    
+    #manual-capture {
+      background-color: white;
+      color: var(--ford-blue);
+      padding: 10px 20px;
+      border-radius: 30px;
+      display: inline-block;
+      font-weight: bold;
+      border: none;
+      width: auto;
+    }
+    
+    #barcode-result {
+      position: absolute;
+      top: 60px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      color: white;
+      padding: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      z-index: 3;
+    }
+
+    /* Canvas for manual capture */
+    #capture-canvas {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
     }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
@@ -393,15 +402,20 @@
   </div>
 </div>
 
-<!-- iOS-optimized scanner container -->
+<!-- Simplified scanner that works on iOS and Android -->
 <div id="scanner-container">
-  <div id="camera-container" class="scanning">
+  <div id="camera-container">
     <video id="scanner" autoplay playsinline muted></video>
     <div id="scan-overlay">
       <div id="scan-region"></div>
     </div>
-    <div id="scanner-instructions">Position VIN barcode in the white frame</div>
-    <div id="scan-status">Camera Ready</div>
+    <div id="scanner-instructions">Position VIN barcode in the box</div>
+    <div id="scan-status">Starting camera...</div>
+    <div id="barcode-result"></div>
+    <div id="manual-scan-container">
+      <button id="manual-capture">Capture Barcode</button>
+    </div>
+    <canvas id="capture-canvas"></canvas>
   </div>
   <div id="close-scanner">×</div>
 </div>
@@ -411,8 +425,8 @@
   <div class="loading-text">Submitting fuel slip...</div>
 </div>
 
-<!-- Include the ZXing library for improved barcode scanning -->
-<script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+<!-- Use the QuaggaJS library which has better iOS compatibility -->
+<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 
 <script>
   const loginScreen = document.getElementById("loginScreen");
@@ -424,6 +438,9 @@
   const closeScanner = document.getElementById("close-scanner");
   const scanStatus = document.getElementById("scan-status");
   const scanRegion = document.getElementById("scan-region");
+  const barcodeResult = document.getElementById("barcode-result");
+  const manualCaptureBtn = document.getElementById("manual-capture");
+  const captureCanvas = document.getElementById("capture-canvas");
 
   const vin = document.getElementById("vin");
   const start = document.getElementById("startGallons");
@@ -455,7 +472,7 @@
   const cBillTo = document.getElementById("c-billTo");
   const cUser = document.getElementById("c-user");
   
-  // Check if device is iOS
+  // Check if device is iOS - for specific iOS handling
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -583,336 +600,253 @@
     fuelForm.classList.add("visible");
   }
 
-  // ENHANCED iOS-COMPATIBLE SCANNER
-  let codeReader;
+  // COMPLETELY REWRITTEN SCANNER LOGIC USING QUAGGA.JS
+  // This is much more compatible with iOS devices
   let videoStream;
   let scanning = false;
-  let scannerTimer;
 
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
+  manualCaptureBtn.addEventListener("click", captureBarcode);
 
-  // Specialized iOS-specific settings
-  function setupIOSSpecificSettings() {
-    if (isIOS) {
-      // iOS requires special handling for fullscreen video
-      const videoElement = document.getElementById('scanner');
-      videoElement.setAttribute('playsinline', '');  // Ensure it plays inline
-      videoElement.setAttribute('webkit-playsinline', '');
-      
-      // For iOS devices, ensure fullscreen presentation
-      document.documentElement.style.height = '100%';
-      document.body.style.height = '100%';
-    }
-  }
-  
-  // Lock orientation and scroll for scanning
-  function lockInteraction() {
+  // Handle iOS specific issues
+  function enableIOSSupport() {
     document.body.style.position = 'fixed';
     document.body.style.width = '100%';
     document.body.style.height = '100%';
-    document.body.style.overflow = 'hidden';
     
-    // Prevent iOS bouncing/elastic scrolling
-    document.addEventListener('touchmove', preventScroll, { passive: false });
+    // Force video attributes that iOS requires
+    const video = document.getElementById('scanner');
+    video.setAttribute('autoplay', '');
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
   }
   
-  function unlockInteraction() {
+  function disableIOSSupport() {
     document.body.style.position = '';
     document.body.style.width = '';
     document.body.style.height = '';
-    document.body.style.overflow = '';
-    
-    // Re-enable scrolling
-    document.removeEventListener('touchmove', preventScroll);
-  }
-  
-  function preventScroll(e) {
-    e.preventDefault();
   }
   
   async function startScanner() {
     try {
-      setupIOSSpecificSettings();
-      lockInteraction();
-      
-      // Clear any previous scanning state
-      clearTimeout(scannerTimer);
-      
-      // Show the scanner container
       scannerContainer.style.display = "block";
       scanStatus.textContent = "Starting camera...";
       
-      // Get the video element
-      const videoElement = document.getElementById('scanner');
-      
-      // Create a new code reader instance
-      codeReader = new ZXing.BrowserMultiFormatReader();
-      
-      // Get available video devices
-      const videoInputDevices = await codeReader.listVideoInputDevices();
-      
-      if (videoInputDevices.length === 0) {
-        alert('No camera devices found');
-        stopScanner();
-        return;
+      if (isIOS) {
+        enableIOSSupport();
       }
       
-      // Find rear camera
-      let selectedDeviceId = null;
-      for (const device of videoInputDevices) {
-        if (device.label.toLowerCase().includes('back') || 
-            device.label.toLowerCase().includes('rear')) {
-          selectedDeviceId = device.deviceId;
-          break;
-        }
-      }
-      
-      // If no rear camera found, use the first one
-      if (!selectedDeviceId && videoInputDevices.length > 0) {
-        selectedDeviceId = videoInputDevices[0].deviceId;
-      }
-      
-      // iOS-optimized video constraints
-      const constraints = {
-        video: {
-          deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          aspectRatio: { ideal: 1.7778 }, // 16:9 aspect ratio
-          frameRate: { min: 15, ideal: 30 } // Better performance on iOS
-        }
-      };
-      
-      // Start video stream directly first
+      // First, get direct access to the camera
       try {
-        scanStatus.textContent = "Accessing camera...";
-        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-        videoElement.srcObject = videoStream;
-        
-        // Wait for video to be ready
-        await new Promise(resolve => {
-          videoElement.onloadedmetadata = () => {
-            videoElement.play().then(() => {
-              scanStatus.textContent = "Camera ready";
-              resolve();
-            }).catch(err => {
-              console.error("Video play error:", err);
-              scanStatus.textContent = "Camera error";
-              resolve(); // Still resolve to continue
-            });
-          };
+        // Simple camera initialization to check access
+        videoStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
         });
         
-        // Configure scanner hints optimized for VIN codes
-        const hints = new Map();
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-          ZXing.BarcodeFormat.CODE_39,
-          ZXing.BarcodeFormat.CODE_128
-        ]);
+        // Connect the video element directly
+        const videoElement = document.getElementById('scanner');
+        videoElement.srcObject = videoStream;
         
-        // Start scanning
-        scanning = true;
-        scanStatus.textContent = "Scanning for VIN...";
+        // Ensure video plays
+        await videoElement.play();
         
-        // Start the scanning process optimized for iOS
-        if (isIOS) {
-          // iOS performs better with a frame-based approach
-          scanWithFrameCapture(videoElement, hints);
-        } else {
-          // Other platforms can use the continuous decode method
-          scanContinuously(videoElement, hints);
-        }
+        // Now initialize Quagga for barcode scanning
+        initQuaggaScanner();
         
-      } catch (streamError) {
-        console.error("Error starting video stream:", streamError);
+      } catch (cameraError) {
+        console.error("Camera access error:", cameraError);
         scanStatus.textContent = "Camera access denied";
         
-        // iOS-specific error handling
         if (isIOS) {
-          alert("Camera access is required for scanning. Please check your privacy settings and ensure camera access is granted to this website.");
+          alert("iOS requires camera access permission. Please check your browser settings and ensure camera access is allowed for this website.");
         } else {
-          alert("Could not access camera. Please check permissions.");
+          alert("Could not access your camera. Please check your permissions and try again.");
         }
-        
-        stopScanner();
       }
       
     } catch (error) {
-      console.error("Error initializing scanner:", error);
+      console.error("Scanner initialization error:", error);
       scanStatus.textContent = "Scanner error";
-      alert("Failed to start the barcode scanner.");
+      alert("There was a problem starting the scanner. Please try again.");
       stopScanner();
     }
   }
   
-  // Specialized scanning method for iOS
-  function scanWithFrameCapture(videoElement, hints) {
-    if (!scanning) return;
+  function initQuaggaScanner() {
+    scanStatus.textContent = "Initializing scanner...";
+    scanning = true;
     
-    // For iOS, we capture frames at a controlled rate
-    scannerTimer = setTimeout(async () => {
-      try {
-        // Create a canvas of the exact video dimensions
-        const canvas = document.createElement('canvas');
-        canvas.width = videoElement.videoWidth;
-        canvas.height = videoElement.videoHeight;
-        
-        // Get the 2D context and draw the current video frame
-        const ctx = canvas.getContext('2d', {alpha: false, desynchronized: true});
-        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-        
-        // Process the frame for barcode detection
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const source = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-        const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
-        
-        try {
-          // Initialize barcode reader with optimized settings
-          const reader = new ZXing.MultiFormatReader();
-          reader.setHints(hints);
-          
-          // Try to decode the image
-          const result = reader.decode(bitmap);
-          
-          if (result && result.getText()) {
-            const code = result.getText();
-            
-            // Visual feedback for successful scan
-            scanRegion.style.borderColor = "#00ff00";
-            scanStatus.textContent = "VIN detected!";
-            
-            // For VIN, process the result
-            if (code && code.length >= 8) {
-              // Valid VIN detected
-              vin.value = code.slice(-8).toUpperCase();
-              
-              // Brief delay before closing to show success feedback
-              setTimeout(() => {
-                stopScanner();
-              }, 500);
-              return;
-            }
-          }
-        } catch (decodeError) {
-          // Ignore "not found" errors, expected during scanning
-          if (!(decodeError instanceof ZXing.NotFoundException)) {
-            console.log("Decode error:", decodeError);
-          }
+    // Quagga scanner configuration
+    Quagga.init({
+      inputStream: {
+        name: "Live",
+        type: "LiveStream",
+        target: document.getElementById('scanner'),
+        constraints: {
+          width: { min: 640 },
+          height: { min: 480 },
+          facingMode: "environment",
+          aspectRatio: { min: 1, max: 2 }
+        },
+        area: { // Only consider the central 80% for scanning
+          top: "10%",
+          right: "10%",
+          left: "10%",
+          bottom: "10%"
         }
+      },
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+      numOfWorkers: navigator.hardwareConcurrency || 4,
+      frequency: 10,
+      decoder: {
+        readers: [
+          "code_39_reader",
+          "code_128_reader"
+        ],
+        multiple: false
+      },
+      locate: true
+    }, function(err) {
+      if (err) {
+        console.error("Quagga initialization error:", err);
+        scanStatus.textContent = "Scanner initialization failed";
         
-        // Continue scanning at an optimized rate for iOS (60ms ≈ 15-16fps)
-        // This provides good performance without excessive battery drain
-        scanWithFrameCapture(videoElement, hints);
-        
-      } catch (frameError) {
-        console.error("Error processing frame:", frameError);
-        scanStatus.textContent = "Scanning error, retrying...";
-        
-        // Continue scanning despite error after a brief delay
-        scanWithFrameCapture(videoElement, hints);
+        // For iOS with initialization problems, enable manual capture
+        manualCaptureBtn.style.display = "inline-block";
+        scanStatus.textContent = "Auto-scan failed. Try manual capture.";
+        return;
       }
-    }, 60); // Optimized frame rate for iOS
+      
+      scanStatus.textContent = "Scanner ready - position VIN barcode";
+      
+      // Start Quagga scanning
+      Quagga.start();
+      
+      // Set up barcode detection handler
+      Quagga.onDetected(handleBarcodeDetection);
+    });
   }
   
-  // Standard scanning method for non-iOS devices
-  function scanContinuously(videoElement, hints) {
+  function handleBarcodeDetection(result) {
     if (!scanning) return;
     
-    requestAnimationFrame(async () => {
-      try {
-        // Capture a frame from the video
-        const canvas = document.createElement('canvas');
-        canvas.width = videoElement.videoWidth;
-        canvas.height = videoElement.videoHeight;
-        const ctx = canvas.getContext('2d');
+    if (result && result.codeResult) {
+      const code = result.codeResult.code;
+      console.log("Barcode detected:", code);
+      
+      barcodeResult.textContent = code;
+      
+      // Provide visual feedback
+      scanRegion.style.borderColor = "#00ff00";
+      
+      // Validate and process the VIN
+      if (code && code.length >= 8) {
+        // Get last 8 characters for VIN
+        vin.value = code.slice(-8).toUpperCase();
         
-        // Draw the current frame
-        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        // Slight delay for feedback
+        setTimeout(() => {
+          stopScanner();
+        }, 500);
+      }
+    }
+  }
+  
+  // Manual barcode capture function for iOS fallback
+  function captureBarcode() {
+    if (!videoStream) return;
+    
+    const video = document.getElementById('scanner');
+    const canvas = document.getElementById('capture-canvas');
+    
+    // Set canvas size to match video dimensions
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Draw the current video frame to canvas
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Process the captured image with Quagga
+    Quagga.decodeSingle({
+      decoder: {
+        readers: ["code_39_reader", "code_128_reader"]
+      },
+      locate: true,
+      src: canvas.toDataURL()
+    }, function(result) {
+      if (result && result.codeResult) {
+        const code = result.codeResult.code;
+        console.log("Manual capture - Barcode detected:", code);
         
-        // Process the frame
-        const source = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-        const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
+        // Show the result
+        barcodeResult.textContent = code;
+        scanRegion.style.borderColor = "#00ff00";
         
-        try {
-          // Configure the barcode reader
-          const reader = new ZXing.MultiFormatReader();
-          reader.setHints(hints);
+        // Process the VIN
+        if (code && code.length >= 8) {
+          vin.value = code.slice(-8).toUpperCase();
           
-          // Attempt to decode
-          const result = reader.decode(bitmap);
-          
-          if (result && result.getText()) {
-            const code = result.getText();
-            
-            // Visual feedback
-            scanRegion.style.borderColor = "#00ff00";
-            scanStatus.textContent = "VIN detected!";
-            
-            // Process valid VIN
-            if (code && code.length >= 8) {
-              vin.value = code.slice(-8).toUpperCase();
-              
-              // Slight delay for visual feedback
-              setTimeout(() => {
-                stopScanner();
-              }, 500);
-              return;
-            }
-          }
-        } catch (decodeError) {
-          // Ignore expected "not found" errors
-          if (!(decodeError instanceof ZXing.NotFoundException)) {
-            console.log("Decode error:", decodeError);
-          }
+          // Close after successful scan
+          setTimeout(() => {
+            stopScanner();
+          }, 800);
+        } else {
+          scanStatus.textContent = "Invalid barcode. Try again.";
+          setTimeout(() => {
+            scanStatus.textContent = "Position VIN barcode and tap Capture";
+            scanRegion.style.borderColor = "#fff";
+          }, 2000);
         }
-        
-        // Continue scanning
-        scanContinuously(videoElement, hints);
-        
-      } catch (frameError) {
-        console.error("Error processing frame:", frameError);
-        scanStatus.textContent = "Scanning error, retrying...";
-        
-        // Continue despite error
-        scanContinuously(videoElement, hints);
+      } else {
+        scanStatus.textContent = "No barcode found. Try again.";
+        setTimeout(() => {
+          scanStatus.textContent = "Position VIN barcode and tap Capture";
+        }, 2000);
       }
     });
   }
 
   function stopScanner() {
     scanning = false;
-    clearTimeout(scannerTimer);
     
-    // Reset scan region color
-    scanRegion.style.borderColor = "#fff";
+    // Stop Quagga scanning
+    try {
+      Quagga.stop();
+    } catch(e) { 
+      // Handle silently
+    }
     
     // Hide the scanner UI
     scannerContainer.style.display = "none";
     
-    // Release system resources
-    unlockInteraction();
+    // Reset style
+    scanRegion.style.borderColor = "#fff";
+    barcodeResult.textContent = "";
     
-    // Stop the video stream
+    // Stop video stream
     if (videoStream) {
-      videoStream.getTracks().forEach(track => {
-        track.stop();
-      });
+      videoStream.getTracks().forEach(track => track.stop());
       videoStream = null;
     }
     
-    // Clean up the code reader
-    if (codeReader) {
-      codeReader.reset();
-      codeReader = null;
+    if (isIOS) {
+      disableIOSSupport();
     }
   }
 
   // Handle closing the scanner if the user clicks the close button
   closeScanner.addEventListener("click", function(e) {
     e.preventDefault();
+    e.stopPropagation();
     stopScanner();
   });
 
@@ -923,39 +857,10 @@
     }
   });
   
-  // Prevent iOS safari from zooming when double-tapping the scanner
-  scannerContainer.addEventListener("touchend", function(e) {
-    if (e.target === scannerContainer) {
-      e.preventDefault();
-    }
-  });
-  
-  // For iOS devices, ensure proper cleanup on page hide/blur
+  // Handle device visibility changes
   document.addEventListener("visibilitychange", function() {
     if (document.hidden && scanning) {
       stopScanner();
-    }
-  });
-  
-  // For iOS, ensure cleanup when app goes to background
-  window.addEventListener("pagehide", function() {
-    if (scanning) {
-      stopScanner();
-    }
-  });
-  
-  // Handle iOS orientation changes gracefully
-  window.addEventListener("orientationchange", function() {
-    if (scanning) {
-      // Brief timeout to let iOS settle after rotation
-      setTimeout(() => {
-        // Refresh scanner size/position after orientation change
-        const videoElement = document.getElementById('scanner');
-        if (videoElement && videoElement.videoWidth) {
-          // Adjust canvas size if needed for new orientation
-          scanStatus.textContent = "Adjusting scanner...";
-        }
-      }, 300);
     }
   });
 </script>
