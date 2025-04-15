@@ -104,7 +104,7 @@
       background-color: #5a6268;
     }
     
-    /* Scanner in forced landscape mode */
+    /* Scanner in forced landscape mode - FIXED FULLSCREEN */
     #scanner-container {
       position: fixed;
       top: 0;
@@ -114,37 +114,22 @@
       background: #000;
       z-index: 1000;
       display: none;
-      overflow: hidden;
     }
     
+    /* Proper fullscreen camera container */
     #camera-container {
       position: absolute;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
       overflow: hidden;
-      /* Force landscape orientation */
-      transform: rotate(90deg);
-      transform-origin: bottom left;
-      width: 100vh; /* height becomes width */
-      height: 100vw; /* width becomes height */
-      top: 0;
-      left: 0;
-    }
-    
-    /* For iOS devices that don't auto-rotate */
-    @supports (-webkit-touch-callout: none) {
-      #camera-container {
-        transform: rotate(90deg);
-        width: 100vh;
-        height: 100vw;
-        transform-origin: bottom left;
-      }
     }
     
     #scanner {
       position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
@@ -154,8 +139,8 @@
       position: absolute;
       top: 0;
       left: 0;
-      right: 0;
-      bottom: 0;
+      width: 100%;
+      height: 100%;
       z-index: 2;
       pointer-events: none;
     }
@@ -190,12 +175,11 @@
       cursor: pointer;
       z-index: 3;
       -webkit-tap-highlight-color: transparent;
-      transform: rotate(0deg); /* Keep close button upright */
     }
     
     #scanner-instructions {
       position: absolute;
-      bottom: 130px;
+      bottom: 80px;
       left: 0;
       width: 100%;
       color: white;
@@ -205,14 +189,13 @@
       font-weight: bold;
       z-index: 2;
       text-shadow: 0 0 10px rgba(0,0,0,0.8);
-      transform: rotate(-90deg); /* Rotate instructions for readability */
     }
     
     #scan-status {
       position: absolute;
-      top: 50%;
-      right: 20px;
-      transform: translateY(-50%) rotate(-90deg);
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       background-color: rgba(0, 0, 0, 0.6);
       color: white;
       padding: 8px 16px;
@@ -293,9 +276,9 @@
     /* Manual scanner mode */
     #manual-scan-container {
       position: absolute;
-      bottom: 50%;
-      left: 20px;
-      transform: translateY(50%) rotate(-90deg);
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       z-index: 3;
     }
     
@@ -312,7 +295,7 @@
     
     #barcode-result {
       position: absolute;
-      top: 20px;
+      top: 60px;
       left: 0;
       width: 100%;
       text-align: center;
@@ -321,7 +304,6 @@
       font-size: 16px;
       font-weight: bold;
       z-index: 3;
-      transform: rotate(-90deg);
     }
 
     /* Canvas for manual capture */
@@ -331,17 +313,22 @@
       top: 0;
       left: 0;
     }
-
-    /* Make sure controls are accessible in landscape */
-    @media (max-height: 500px) {
-      #scanner-instructions {
-        font-size: 14px;
-        bottom: 100px;
-      }
-      
-      #manual-capture {
-        padding: 8px 16px;
-        font-size: 14px;
+    
+    /* Force body to take full height/width when scanner is active */
+    body.scanning {
+      padding: 0;
+      margin: 0;
+      max-width: 100%;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    /* Ensure scanner properly displays in landscape */
+    @media screen and (orientation: landscape) {
+      body.scanning #camera-container {
+        width: 100vw;
+        height: 100vh;
       }
     }
   </style>
@@ -434,14 +421,14 @@
   </div>
 </div>
 
-<!-- Forced landscape scanner that works on iOS and Android -->
+<!-- Fixed fullscreen scanner that works on iOS and Android -->
 <div id="scanner-container">
   <div id="camera-container">
     <video id="scanner" autoplay playsinline muted></video>
     <div id="scan-overlay">
       <div id="scan-region"></div>
     </div>
-    <div id="scanner-instructions">Position VIN barcode horizontally in the box</div>
+    <div id="scanner-instructions">Position VIN barcode in the box</div>
     <div id="scan-status">Starting camera...</div>
     <div id="barcode-result"></div>
     <div id="manual-scan-container">
@@ -625,7 +612,7 @@
     fuelForm.classList.add("visible");
   }
 
-  // IMPROVED LANDSCAPE-LOCKED VIN SCANNER
+  // IMPROVED FULLSCREEN LANDSCAPE SCANNER
   let videoStream;
   let scanning = false;
   let previousScans = [];
@@ -638,54 +625,80 @@
   closeScanner.addEventListener("click", stopScanner);
   manualCaptureBtn.addEventListener("click", captureBarcode);
 
-  // Force and lock landscape orientation 
-  function lockLandscapeOrientation() {
-    // Try to lock orientation if supported
+  // Force landscape mode and set proper fullscreen
+  function setupFullscreenLandscape() {
+    // Add scanning class to body to reset layout
+    document.body.classList.add('scanning');
+    
+    // Make scanner container fullscreen
+    scannerContainer.style.display = 'block';
+    
+    // Try to lock to landscape if supported
     if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').then(() => {
-        console.log("Orientation locked to landscape");
-      }).catch(e => {
-        console.log("Orientation lock failed:", e);
+      screen.orientation.lock('landscape').catch(e => {
+        console.log('Orientation lock failed:', e);
       });
     }
     
-    // For iOS force landscape through CSS
+    // iOS specific adjustments
     if (isIOS) {
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
+      // Force layout for iOS
+      document.documentElement.style.height = '100%';
+      document.documentElement.style.width = '100%';
       document.body.style.height = '100%';
+      document.body.style.width = '100%';
+      document.body.style.position = 'fixed';
       document.body.style.overflow = 'hidden';
+      
+      // Set transform on scanner container if needed
+      if (window.matchMedia("(orientation: portrait)").matches) {
+        scannerContainer.style.transform = 'rotate(90deg)';
+        scannerContainer.style.transformOrigin = 'bottom left';
+        scannerContainer.style.width = '100vh';
+        scannerContainer.style.height = '100vw';
+      }
     }
+    
+    // Hide manual capture by default (show only if auto fails)
+    manualCaptureBtn.style.display = 'none';
   }
   
-  function unlockOrientation() {
+  function cleanupFullscreenLandscape() {
+    // Remove scanning class from body
+    document.body.classList.remove('scanning');
+    
+    // Reset scanner container
+    scannerContainer.style.display = 'none';
+    scannerContainer.style.transform = '';
+    
+    // Unlock screen orientation if we locked it
     if (screen.orientation && screen.orientation.unlock) {
       screen.orientation.unlock();
     }
     
-    // Restore normal layout
+    // Remove iOS specific styles
     if (isIOS) {
-      document.body.style.position = '';
-      document.body.style.width = '';
+      document.documentElement.style.height = '';
+      document.documentElement.style.width = '';
       document.body.style.height = '';
+      document.body.style.width = '';
+      document.body.style.position = '';
       document.body.style.overflow = '';
     }
   }
   
   async function startScanner() {
     try {
-      // Clear previous data
+      // Setup fullscreen landscape mode
+      setupFullscreenLandscape();
+      
+      // Clear previous scans
       previousScans = [];
       barcodeResult.textContent = "";
-      scannerContainer.style.display = "block";
       scanStatus.textContent = "Starting camera...";
       
-      // Force landscape orientation
-      lockLandscapeOrientation();
-      
-      // Begin camera initialization
       try {
-        // Camera constraints optimized for VIN scanning (landscape)
+        // Get camera access with optimal settings for VIN scanning
         const constraints = {
           video: {
             facingMode: "environment",
@@ -694,40 +707,50 @@
           }
         };
         
-        // Get camera access
+        // Request camera access
         videoStream = await navigator.mediaDevices.getUserMedia(constraints);
         
-        // Connect video feed
+        // Connect video stream to video element
         const videoElement = document.getElementById('scanner');
         videoElement.srcObject = videoStream;
         
-        // Ensure video plays
-        await videoElement.play();
-        
-        // Initialize QuaggaJS with settings optimized for VIN codes
-        initQuaggaScanner();
+        // Make sure video plays (important for iOS)
+        try {
+          await videoElement.play();
+          scanStatus.textContent = "Initializing scanner...";
+          
+          // Initialize barcode scanner
+          initQuaggaScanner();
+          
+        } catch (playError) {
+          console.error("Error playing video:", playError);
+          scanStatus.textContent = "Video playback error";
+          manualCaptureBtn.style.display = 'inline-block';
+        }
         
       } catch (cameraError) {
         console.error("Camera access error:", cameraError);
         scanStatus.textContent = "Camera access denied";
         
+        // Show helpful error based on device
         if (isIOS) {
-          alert("Please ensure camera access is granted for Safari in your iOS settings.");
+          alert("Please allow camera access in your iOS settings for Safari.");
         } else {
-          alert("Could not access your camera. Please check your permissions.");
+          alert("Camera access was denied. Please check your permissions and try again.");
         }
+        
+        stopScanner();
       }
       
     } catch (error) {
-      console.error("Scanner startup error:", error);
+      console.error("Scanner initialization error:", error);
       scanStatus.textContent = "Scanner error";
-      alert("Failed to start the scanner. Please try again.");
+      alert("Failed to start the barcode scanner. Please try again.");
       stopScanner();
     }
   }
   
   function initQuaggaScanner() {
-    scanStatus.textContent = "Initializing scanner...";
     scanning = true;
     
     // Configure Quagga with settings optimized for VIN scanning
@@ -743,7 +766,7 @@
           aspectRatio: { min: 1, max: 2 }
         },
         area: {
-          // Focus on the central region where VINs are likely to be
+          // Scan the center part of the view
           top: "20%",
           right: "10%",
           left: "10%",
@@ -787,7 +810,7 @@
         return;
       }
       
-      scanStatus.textContent = "Ready - Position VIN barcode horizontally";
+      scanStatus.textContent = "Ready - Position VIN barcode in box";
       
       // Start Quagga
       Quagga.start();
@@ -795,7 +818,7 @@
       // Handle detected barcodes
       Quagga.onDetected(handleBarcodeDetection);
       
-      // Show debug info for detected but not decoded barcodes
+      // Show debug info for detected barcodes
       Quagga.onProcessed(function(result) {
         var drawingCtx = Quagga.canvas.ctx.overlay,
             drawingCanvas = Quagga.canvas.dom.overlay;
@@ -977,10 +1000,7 @@
       // Handle silently
     }
     
-    // Hide the scanner UI
-    scannerContainer.style.display = "none";
-    
-    // Reset style
+    // Reset UI
     scanRegion.style.borderColor = "#fff";
     barcodeResult.textContent = "";
     
@@ -990,8 +1010,8 @@
       videoStream = null;
     }
     
-    // Unlock orientation
-    unlockOrientation();
+    // Reset fullscreen and orientation
+    cleanupFullscreenLandscape();
   }
 
   // Handle closing the scanner
