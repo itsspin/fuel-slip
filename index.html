@@ -104,15 +104,17 @@
       background-color: #5a6268;
     }
     
+    /* Scanner in forced landscape mode */
     #scanner-container {
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
       background: #000;
       z-index: 1000;
       display: none;
+      overflow: hidden;
     }
     
     #camera-container {
@@ -122,12 +124,27 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      /* Force landscape orientation */
+      transform: rotate(90deg);
+      transform-origin: bottom left;
+      width: 100vh; /* height becomes width */
+      height: 100vw; /* width becomes height */
+      top: 0;
+      left: 0;
+    }
+    
+    /* For iOS devices that don't auto-rotate */
+    @supports (-webkit-touch-callout: none) {
+      #camera-container {
+        transform: rotate(90deg);
+        width: 100vh;
+        height: 100vw;
+        transform-origin: bottom left;
+      }
     }
     
     #scanner {
       position: absolute;
-      top: 0;
-      left: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
@@ -149,8 +166,8 @@
       left: 50%;
       transform: translate(-50%, -50%);
       width: 80%;
-      max-width: 350px;
-      height: 100px;
+      max-width: 500px;
+      height: 120px;
       border: 3px solid #fff;
       border-radius: 10px;
       box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.6);
@@ -173,11 +190,12 @@
       cursor: pointer;
       z-index: 3;
       -webkit-tap-highlight-color: transparent;
+      transform: rotate(0deg); /* Keep close button upright */
     }
     
     #scanner-instructions {
       position: absolute;
-      bottom: 80px;
+      bottom: 130px;
       left: 0;
       width: 100%;
       color: white;
@@ -187,13 +205,14 @@
       font-weight: bold;
       z-index: 2;
       text-shadow: 0 0 10px rgba(0,0,0,0.8);
+      transform: rotate(-90deg); /* Rotate instructions for readability */
     }
     
     #scan-status {
       position: absolute;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
+      top: 50%;
+      right: 20px;
+      transform: translateY(-50%) rotate(-90deg);
       background-color: rgba(0, 0, 0, 0.6);
       color: white;
       padding: 8px 16px;
@@ -271,13 +290,12 @@
       background-color: var(--ford-gray);
     }
     
-    /* Manual scanner mode for when ZXing fails */
+    /* Manual scanner mode */
     #manual-scan-container {
       position: absolute;
-      bottom: 140px;
-      left: 0;
-      width: 100%;
-      text-align: center;
+      bottom: 50%;
+      left: 20px;
+      transform: translateY(50%) rotate(-90deg);
       z-index: 3;
     }
     
@@ -294,7 +312,7 @@
     
     #barcode-result {
       position: absolute;
-      top: 60px;
+      top: 20px;
       left: 0;
       width: 100%;
       text-align: center;
@@ -303,6 +321,7 @@
       font-size: 16px;
       font-weight: bold;
       z-index: 3;
+      transform: rotate(-90deg);
     }
 
     /* Canvas for manual capture */
@@ -311,6 +330,19 @@
       position: absolute;
       top: 0;
       left: 0;
+    }
+
+    /* Make sure controls are accessible in landscape */
+    @media (max-height: 500px) {
+      #scanner-instructions {
+        font-size: 14px;
+        bottom: 100px;
+      }
+      
+      #manual-capture {
+        padding: 8px 16px;
+        font-size: 14px;
+      }
     }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
@@ -402,14 +434,14 @@
   </div>
 </div>
 
-<!-- Simplified scanner that works on iOS and Android -->
+<!-- Forced landscape scanner that works on iOS and Android -->
 <div id="scanner-container">
   <div id="camera-container">
     <video id="scanner" autoplay playsinline muted></video>
     <div id="scan-overlay">
       <div id="scan-region"></div>
     </div>
-    <div id="scanner-instructions">Position VIN barcode in the box</div>
+    <div id="scanner-instructions">Position VIN barcode horizontally in the box</div>
     <div id="scan-status">Starting camera...</div>
     <div id="barcode-result"></div>
     <div id="manual-scan-container">
@@ -425,7 +457,7 @@
   <div class="loading-text">Submitting fuel slip...</div>
 </div>
 
-<!-- Use the QuaggaJS library which has better iOS compatibility -->
+<!-- QuaggaJS for barcode scanning -->
 <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 
 <script>
@@ -472,7 +504,7 @@
   const cBillTo = document.getElementById("c-billTo");
   const cUser = document.getElementById("c-user");
   
-  // Check if device is iOS - for specific iOS handling
+  // Check if device is iOS
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -501,17 +533,10 @@
   start.addEventListener("input", calc);
   end.addEventListener("input", calc);
   
-  // Process VIN input - allow full VIN or extract last 8 characters
+  // Process VIN input - updated to keep full VIN if provided
   vin.addEventListener("blur", function() {
     let vinValue = this.value.trim().toUpperCase();
-    
-    if (vinValue.length > 8) {
-      // If it's longer than 8 chars, it might be a full VIN
-      // Extract the last 8 characters
-      this.value = vinValue.slice(-8).toUpperCase();
-    } else {
-      this.value = vinValue.toUpperCase();
-    }
+    this.value = vinValue;
   });
 
   fuelForm.addEventListener("submit", (e) => {
@@ -600,62 +625,86 @@
     fuelForm.classList.add("visible");
   }
 
-  // COMPLETELY REWRITTEN SCANNER LOGIC USING QUAGGA.JS
-  // This is much more compatible with iOS devices
+  // IMPROVED LANDSCAPE-LOCKED VIN SCANNER
   let videoStream;
   let scanning = false;
+  let previousScans = [];
+  
+  // VIN-specific settings
+  const MIN_VIN_LENGTH = 8; // Minimum number of characters to accept
+  const MAX_SCANS_TO_STORE = 5; // Number of recent scans to store for consensus
 
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
   manualCaptureBtn.addEventListener("click", captureBarcode);
 
-  // Handle iOS specific issues
-  function enableIOSSupport() {
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = '100%';
+  // Force and lock landscape orientation 
+  function lockLandscapeOrientation() {
+    // Try to lock orientation if supported
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').then(() => {
+        console.log("Orientation locked to landscape");
+      }).catch(e => {
+        console.log("Orientation lock failed:", e);
+      });
+    }
     
-    // Force video attributes that iOS requires
-    const video = document.getElementById('scanner');
-    video.setAttribute('autoplay', '');
-    video.setAttribute('muted', '');
-    video.setAttribute('playsinline', '');
+    // For iOS force landscape through CSS
+    if (isIOS) {
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.height = '100%';
+      document.body.style.overflow = 'hidden';
+    }
   }
   
-  function disableIOSSupport() {
-    document.body.style.position = '';
-    document.body.style.width = '';
-    document.body.style.height = '';
+  function unlockOrientation() {
+    if (screen.orientation && screen.orientation.unlock) {
+      screen.orientation.unlock();
+    }
+    
+    // Restore normal layout
+    if (isIOS) {
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+      document.body.style.overflow = '';
+    }
   }
   
   async function startScanner() {
     try {
+      // Clear previous data
+      previousScans = [];
+      barcodeResult.textContent = "";
       scannerContainer.style.display = "block";
       scanStatus.textContent = "Starting camera...";
       
-      if (isIOS) {
-        enableIOSSupport();
-      }
+      // Force landscape orientation
+      lockLandscapeOrientation();
       
-      // First, get direct access to the camera
+      // Begin camera initialization
       try {
-        // Simple camera initialization to check access
-        videoStream = await navigator.mediaDevices.getUserMedia({
+        // Camera constraints optimized for VIN scanning (landscape)
+        const constraints = {
           video: {
             facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 }
           }
-        });
+        };
         
-        // Connect the video element directly
+        // Get camera access
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // Connect video feed
         const videoElement = document.getElementById('scanner');
         videoElement.srcObject = videoStream;
         
         // Ensure video plays
         await videoElement.play();
         
-        // Now initialize Quagga for barcode scanning
+        // Initialize QuaggaJS with settings optimized for VIN codes
         initQuaggaScanner();
         
       } catch (cameraError) {
@@ -663,16 +712,16 @@
         scanStatus.textContent = "Camera access denied";
         
         if (isIOS) {
-          alert("iOS requires camera access permission. Please check your browser settings and ensure camera access is allowed for this website.");
+          alert("Please ensure camera access is granted for Safari in your iOS settings.");
         } else {
-          alert("Could not access your camera. Please check your permissions and try again.");
+          alert("Could not access your camera. Please check your permissions.");
         }
       }
       
     } catch (error) {
-      console.error("Scanner initialization error:", error);
+      console.error("Scanner startup error:", error);
       scanStatus.textContent = "Scanner error";
-      alert("There was a problem starting the scanner. Please try again.");
+      alert("Failed to start the scanner. Please try again.");
       stopScanner();
     }
   }
@@ -681,7 +730,7 @@
     scanStatus.textContent = "Initializing scanner...";
     scanning = true;
     
-    // Quagga scanner configuration
+    // Configure Quagga with settings optimized for VIN scanning
     Quagga.init({
       inputStream: {
         name: "Live",
@@ -693,23 +742,36 @@
           facingMode: "environment",
           aspectRatio: { min: 1, max: 2 }
         },
-        area: { // Only consider the central 80% for scanning
-          top: "10%",
+        area: {
+          // Focus on the central region where VINs are likely to be
+          top: "20%",
           right: "10%",
           left: "10%",
-          bottom: "10%"
+          bottom: "20%"
         }
       },
       locator: {
         patchSize: "medium",
         halfSample: true
       },
-      numOfWorkers: navigator.hardwareConcurrency || 4,
+      numOfWorkers: 4,
       frequency: 10,
       decoder: {
         readers: [
-          "code_39_reader",
-          "code_128_reader"
+          {
+            format: "code_39_reader",
+            config: {
+              supplements: [
+                'code_39_vin'
+              ]
+            }
+          },
+          {
+            format: "code_128_reader",
+            config: {
+              supplements: []
+            }
+          }
         ],
         multiple: false
       },
@@ -719,48 +781,126 @@
         console.error("Quagga initialization error:", err);
         scanStatus.textContent = "Scanner initialization failed";
         
-        // For iOS with initialization problems, enable manual capture
+        // Show manual capture button as fallback
         manualCaptureBtn.style.display = "inline-block";
         scanStatus.textContent = "Auto-scan failed. Try manual capture.";
         return;
       }
       
-      scanStatus.textContent = "Scanner ready - position VIN barcode";
+      scanStatus.textContent = "Ready - Position VIN barcode horizontally";
       
-      // Start Quagga scanning
+      // Start Quagga
       Quagga.start();
       
-      // Set up barcode detection handler
+      // Handle detected barcodes
       Quagga.onDetected(handleBarcodeDetection);
+      
+      // Show debug info for detected but not decoded barcodes
+      Quagga.onProcessed(function(result) {
+        var drawingCtx = Quagga.canvas.ctx.overlay,
+            drawingCanvas = Quagga.canvas.dom.overlay;
+
+        if (result) {
+          if (result.boxes) {
+            drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+            result.boxes.filter(function (box) {
+                return box !== result.box;
+            }).forEach(function (box) {
+                Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+            });
+          }
+
+          if (result.box) {
+            Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "blue", lineWidth: 2});
+          }
+
+          if (result.codeResult && result.codeResult.code) {
+            Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: "red", lineWidth: 3});
+          }
+        }
+      });
     });
   }
   
+  // Improved VIN detection with validation and consensus
   function handleBarcodeDetection(result) {
     if (!scanning) return;
     
     if (result && result.codeResult) {
-      const code = result.codeResult.code;
-      console.log("Barcode detected:", code);
+      const scannedCode = result.codeResult.code;
+      console.log("Barcode detected:", scannedCode);
       
-      barcodeResult.textContent = code;
+      // VIN validation - typical VIN is 17 characters, alphanumeric
+      // But we'll accept at least 8 characters for partial VINs
+      const isValidVIN = /^[A-Z0-9]+$/i.test(scannedCode) && scannedCode.length >= MIN_VIN_LENGTH;
       
-      // Provide visual feedback
-      scanRegion.style.borderColor = "#00ff00";
-      
-      // Validate and process the VIN
-      if (code && code.length >= 8) {
-        // Get last 8 characters for VIN
-        vin.value = code.slice(-8).toUpperCase();
+      if (isValidVIN) {
+        // Add to recent scans
+        previousScans.push(scannedCode.toUpperCase());
+        if (previousScans.length > MAX_SCANS_TO_STORE) {
+          previousScans.shift(); // Remove oldest scan
+        }
         
-        // Slight delay for feedback
+        // Show current detection
+        barcodeResult.textContent = scannedCode.toUpperCase();
+        scanRegion.style.borderColor = "#00ff00";
+        
+        // Check for consensus (multiple identical scans)
+        const mostFrequentScan = findMostFrequentScan(previousScans);
+        if (mostFrequentScan && mostFrequentScan.count >= 2) {
+          // We have a confident scan with at least 2 identical reads
+          console.log("Confident VIN scan:", mostFrequentScan.value);
+          scanStatus.textContent = "Valid VIN detected!";
+          
+          // If it's a full-length VIN (or close to it), use the whole thing
+          // Otherwise, use the last 8 characters
+          if (mostFrequentScan.value.length >= 17) {
+            vin.value = mostFrequentScan.value.toUpperCase();
+          } else {
+            // If it's a partial VIN, try to use the last 8 characters if available
+            const partialVin = mostFrequentScan.value.length >= 8 
+              ? mostFrequentScan.value.slice(-8).toUpperCase()
+              : mostFrequentScan.value.toUpperCase();
+              
+            vin.value = partialVin;
+          }
+          
+          // Provide success feedback before closing
+          setTimeout(() => {
+            stopScanner();
+          }, 800);
+        }
+      } else {
+        // Invalid format for VIN
+        console.log("Invalid VIN format detected");
+        barcodeResult.textContent = "Invalid format - Not a VIN";
         setTimeout(() => {
-          stopScanner();
-        }, 500);
+          barcodeResult.textContent = "";
+        }, 2000);
       }
     }
   }
   
-  // Manual barcode capture function for iOS fallback
+  // Helper to find the most frequent scan in our recent scans
+  function findMostFrequentScan(scans) {
+    if (scans.length === 0) return null;
+    
+    const counts = {};
+    let maxCount = 0;
+    let maxValue = null;
+    
+    for (const scan of scans) {
+      counts[scan] = (counts[scan] || 0) + 1;
+      if (counts[scan] > maxCount) {
+        maxCount = counts[scan];
+        maxValue = scan;
+      }
+    }
+    
+    return { value: maxValue, count: maxCount };
+  }
+  
+  // Manual barcode capture function (for fallback)
   function captureBarcode() {
     if (!videoStream) return;
     
@@ -778,7 +918,13 @@
     // Process the captured image with Quagga
     Quagga.decodeSingle({
       decoder: {
-        readers: ["code_39_reader", "code_128_reader"]
+        readers: [
+          {
+            format: "code_39_reader",
+            config: { supplements: ['code_39_vin'] }
+          },
+          "code_128_reader"
+        ]
       },
       locate: true,
       src: canvas.toDataURL()
@@ -788,19 +934,25 @@
         console.log("Manual capture - Barcode detected:", code);
         
         // Show the result
-        barcodeResult.textContent = code;
+        barcodeResult.textContent = code.toUpperCase();
         scanRegion.style.borderColor = "#00ff00";
         
         // Process the VIN
-        if (code && code.length >= 8) {
-          vin.value = code.slice(-8).toUpperCase();
+        if (code && code.length >= MIN_VIN_LENGTH) {
+          if (code.length >= 17) {
+            // Full VIN
+            vin.value = code.toUpperCase();
+          } else {
+            // Partial VIN - use last 8 if available
+            vin.value = code.length >= 8 ? code.slice(-8).toUpperCase() : code.toUpperCase();
+          }
           
           // Close after successful scan
           setTimeout(() => {
             stopScanner();
           }, 800);
         } else {
-          scanStatus.textContent = "Invalid barcode. Try again.";
+          scanStatus.textContent = "VIN needs at least 8 characters";
           setTimeout(() => {
             scanStatus.textContent = "Position VIN barcode and tap Capture";
             scanRegion.style.borderColor = "#fff";
@@ -818,7 +970,7 @@
   function stopScanner() {
     scanning = false;
     
-    // Stop Quagga scanning
+    // Stop Quagga if it's running
     try {
       Quagga.stop();
     } catch(e) { 
@@ -838,12 +990,11 @@
       videoStream = null;
     }
     
-    if (isIOS) {
-      disableIOSSupport();
-    }
+    // Unlock orientation
+    unlockOrientation();
   }
 
-  // Handle closing the scanner if the user clicks the close button
+  // Handle closing the scanner
   closeScanner.addEventListener("click", function(e) {
     e.preventDefault();
     e.stopPropagation();
