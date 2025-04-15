@@ -108,92 +108,85 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.9);
+      background: #000;
       z-index: 1000;
       display: none;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
     }
     
-    #scanner-wrapper {
-      position: relative;
+    /* Fixed camera wrapper - does not rotate or change */
+    #camera-container {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      overflow: hidden; /* Prevent any overflow */
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
+    /* Video always stays in the same orientation */
     #scanner {
+      position: absolute;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      /* Force the video to be in landscape mode regardless of device orientation */
-      transform: rotate(0deg); /* Default no rotation */
+      transform: scaleX(-1); /* Mirror horizontally for easier scanning */
     }
     
-    /* Fixed scan region */
+    #scan-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    
     #scan-region {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 70%;
-      height: 120px;
+      width: 80%;
+      max-width: 350px;
+      height: 100px;
       border: 2px solid #fff;
       border-radius: 10px;
-      box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.5);
-      z-index: 1;
+      box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.6);
     }
     
     #close-scanner {
       position: absolute;
       top: 20px;
       right: 20px;
-      width: 40px;
-      height: 40px;
+      width: 50px;
+      height: 50px;
       background: rgba(255, 255, 255, 0.8);
       color: var(--ford-blue);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
+      font-size: 30px;
       cursor: pointer;
-      z-index: 2;
+      z-index: 3;
     }
     
     #scanner-instructions {
       position: absolute;
-      bottom: 40px;
+      bottom: 80px;
       left: 0;
       width: 100%;
       color: white;
       text-align: center;
-      padding: 10px;
-      font-size: 16px;
-      z-index: 2;
-    }
-    
-    /* Scanner controls */
-    #scanner-controls {
-      position: absolute;
-      bottom: 100px;
-      left: 0;
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      z-index: 2;
-    }
-    
-    #scanner-controls button {
-      background: rgba(255, 255, 255, 0.8);
-      color: var(--ford-blue);
-      border: none;
-      border-radius: 20px;
-      padding: 8px 16px;
-      margin: 0 5px;
+      padding: 15px;
+      font-size: 18px;
       font-weight: bold;
-      width: auto;
+      z-index: 2;
+      text-shadow: 0 0 10px rgba(0,0,0,0.8);
     }
     
     .loading-overlay {
@@ -344,15 +337,14 @@
   </div>
 </div>
 
+<!-- Completely rebuilt scanner container with fixed orientation -->
 <div id="scanner-container">
-  <div id="scanner-wrapper">
-    <video id="scanner"></video>
-    <div id="scan-region"></div>
-    <div id="scanner-instructions">Position the VIN barcode within the frame</div>
-    <div id="scanner-controls">
-      <button id="rotate-ccw">Rotate Left</button>
-      <button id="rotate-cw">Rotate Right</button>
+  <div id="camera-container">
+    <video id="scanner" autoplay playsinline></video>
+    <div id="scan-overlay">
+      <div id="scan-region"></div>
     </div>
+    <div id="scanner-instructions">Position the VIN barcode in the frame</div>
   </div>
   <div id="close-scanner">×</div>
 </div>
@@ -373,8 +365,6 @@
   const loadingOverlay = document.getElementById("loadingOverlay");
   const scannerContainer = document.getElementById("scanner-container");
   const closeScanner = document.getElementById("close-scanner");
-  const rotateClockwise = document.getElementById("rotate-cw");
-  const rotateCounterClockwise = document.getElementById("rotate-ccw");
 
   const vin = document.getElementById("vin");
   const start = document.getElementById("startGallons");
@@ -530,70 +520,59 @@
     fuelForm.classList.add("visible");
   }
 
-  // Improved barcode scanner with fixed orientation
+  // COMPLETELY REDESIGNED SCANNER WITH FIXED ORIENTATION
   let codeReader;
-  let selectedDeviceId;
+  let videoStream;
   let scanning = false;
-  let currentRotation = 0; // Starting rotation angle (in degrees)
 
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
-  
-  // Rotate camera view handlers
-  rotateClockwise.addEventListener("click", function() {
-    rotateCamera(90); // Rotate 90 degrees clockwise
-  });
-  
-  rotateCounterClockwise.addEventListener("click", function() {
-    rotateCamera(-90); // Rotate 90 degrees counter-clockwise
-  });
-  
-  function rotateCamera(degrees) {
-    const scanner = document.getElementById('scanner');
-    currentRotation = (currentRotation + degrees) % 360;
-    if (currentRotation < 0) currentRotation += 360; // Make sure we stay in the 0-359 range
-    
-    scanner.style.transform = `rotate(${currentRotation}deg)`;
-    
-    // Save the current rotation preference
-    localStorage.setItem('scannerRotation', currentRotation);
-  }
 
-  // Completely disable orientation changes during scanning
-  function disableOrientationChange() {
-    // Disable orientation change by setting fixed styles
+  // Prevent any orientation changes during scanning
+  function lockOrientation() {
+    // Add a meta tag to force portrait orientation
+    const metaTag = document.createElement('meta');
+    metaTag.name = 'viewport';
+    metaTag.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, orientation=landscape';
+    metaTag.id = 'viewport-lock';
+    document.head.appendChild(metaTag);
+    
+    // Lock the body
     document.body.style.position = 'fixed';
     document.body.style.width = '100%';
     document.body.style.height = '100%';
     document.body.style.overflow = 'hidden';
   }
   
-  function enableOrientationChange() {
-    // Re-enable orientation change
+  function unlockOrientation() {
+    // Remove orientation locking meta tag
+    const metaTag = document.getElementById('viewport-lock');
+    if (metaTag) {
+      metaTag.remove();
+    }
+    
+    // Unlock the body
     document.body.style.position = '';
     document.body.style.width = '';
     document.body.style.height = '';
     document.body.style.overflow = '';
   }
-
+  
   async function startScanner() {
     try {
-      scannerContainer.style.display = "flex";
-      codeReader = new ZXing.BrowserMultiFormatReader();
+      // Lock orientation
+      lockOrientation();
       
+      // Show the scanner container
+      scannerContainer.style.display = "block";
+      
+      // Get the video element
       const videoElement = document.getElementById('scanner');
       
-      // Disable orientation changes completely
-      disableOrientationChange();
+      // Create a new code reader instance
+      codeReader = new ZXing.BrowserMultiFormatReader();
       
-      // Load saved rotation preference if available
-      const savedRotation = localStorage.getItem('scannerRotation');
-      if (savedRotation !== null) {
-        currentRotation = parseInt(savedRotation);
-        videoElement.style.transform = `rotate(${currentRotation}deg)`;
-      }
-      
-      // List available video input devices
+      // Get available video devices
       const videoInputDevices = await codeReader.listVideoInputDevices();
       
       if (videoInputDevices.length === 0) {
@@ -602,10 +581,8 @@
         return;
       }
       
-      // Try to select the back camera (usually best for scanning)
-      selectedDeviceId = undefined;  // Default to system selection
-      
-      // Look for a back camera
+      // Find rear camera
+      let selectedDeviceId = null;
       for (const device of videoInputDevices) {
         if (device.label.toLowerCase().includes('back') || 
             device.label.toLowerCase().includes('rear')) {
@@ -614,20 +591,12 @@
         }
       }
       
-      // If no back camera, use the first one
+      // If no rear camera found, use the first one
       if (!selectedDeviceId && videoInputDevices.length > 0) {
         selectedDeviceId = videoInputDevices[0].deviceId;
       }
       
-      // Configure hints for better VIN scanning
-      const hints = new Map();
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODE_128]);
-      
-      // Start decoding from the selected camera with fixed constraints
-      scanning = true;
-      
-      // Use exact constraints to prevent orientation changes
+      // Define hard-coded constraints for fixed orientation
       const constraints = {
         video: {
           deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
@@ -637,42 +606,121 @@
         }
       };
       
-      codeReader.decodeFromConstraints(constraints, videoElement, (result, error) => {
-        if (!scanning) return;
+      // Start video stream directly first to ensure orientation is fixed
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoElement.srcObject = videoStream;
         
-        if (result) {
-          console.log('Barcode detected:', result.getText());
-          const code = result.getText();
+        // Wait for video to be ready
+        await new Promise(resolve => {
+          videoElement.onloadedmetadata = () => {
+            videoElement.play();
+            resolve();
+          };
+        });
+        
+        // Configure scanner hints for VIN codes
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODE_128]);
+        
+        // Start scanning
+        scanning = true;
+        
+        // Start the continuous scanning process
+        scanContinuously(videoElement, hints);
+        
+      } catch (streamError) {
+        console.error("Error starting video stream:", streamError);
+        alert("Could not access camera. Please check permissions.");
+        stopScanner();
+      }
+      
+    } catch (error) {
+      console.error("Error initializing scanner:", error);
+      alert("Failed to start the barcode scanner.");
+      stopScanner();
+    }
+  }
+  
+  function scanContinuously(videoElement, hints) {
+    if (!scanning) return;
+    
+    requestAnimationFrame(async () => {
+      try {
+        // Manually capture a frame and decode it
+        const canvas = document.createElement('canvas');
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw the current video frame to canvas
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        
+        // Get the image data
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // Use ZXing to decode
+        const source = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
+        
+        try {
+          const reader = new ZXing.MultiFormatReader();
           
-          // For VIN, we need the last 8 characters
-          if (code && code.length >= 8) {
-            vin.value = code.slice(-8).toUpperCase();
-            stopScanner();
+          // Apply hints
+          if (hints) {
+            reader.setHints(hints);
+          }
+          
+          const result = reader.decode(bitmap);
+          
+          if (result && result.getText()) {
+            console.log('Barcode detected:', result.getText());
+            const code = result.getText();
+            
+            // For VIN, we need the last 8 characters
+            if (code && code.length >= 8) {
+              vin.value = code.slice(-8).toUpperCase();
+              stopScanner();
+              return;
+            }
+          }
+        } catch (decodeError) {
+          // Ignore "not found" errors, which are expected between successful scans
+          if (!(decodeError instanceof ZXing.NotFoundException)) {
+            console.log("Decode error:", decodeError);
           }
         }
         
-        if (error && !(error instanceof ZXing.NotFoundException)) {
-          console.error('Scanner error:', error);
-        }
-      }, hints);
-      
-    } catch (err) {
-      console.error('Scanner initialization error:', err);
-      alert('Failed to start the barcode scanner. Please check your camera permissions.');
-      stopScanner();
-    }
+        // Continue scanning
+        scanContinuously(videoElement, hints);
+        
+      } catch (frameError) {
+        console.error("Error processing frame:", frameError);
+        
+        // Continue scanning despite error
+        scanContinuously(videoElement, hints);
+      }
+    });
   }
 
   function stopScanner() {
     scanning = false;
     scannerContainer.style.display = "none";
     
-    // Re-enable orientation changes
-    enableOrientationChange();
+    // Unlock orientation
+    unlockOrientation();
     
+    // Stop video stream
+    if (videoStream) {
+      videoStream.getTracks().forEach(track => track.stop());
+      videoStream = null;
+    }
+    
+    // Reset code reader
     if (codeReader) {
       codeReader.reset();
-      codeReader = undefined;
+      codeReader = null;
     }
   }
 
@@ -687,14 +735,6 @@
   document.addEventListener("keydown", function(e) {
     if (e.key === "Escape" && scanning) {
       stopScanner();
-    }
-  });
-  
-  // Prevent any orientation change events from affecting the app during scanning
-  window.addEventListener("orientationchange", function() {
-    if (scanning) {
-      // Immediately reapply our fixed orientation settings
-      setTimeout(disableOrientationChange, 50);
     }
   });
 </script>
