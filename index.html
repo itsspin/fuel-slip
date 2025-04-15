@@ -120,13 +120,28 @@
       position: relative;
       width: 100%;
       max-width: 600px;
+      height: 100%;
+      max-height: 80vh;
       margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
     #scanner {
       width: 100%;
       height: 100%;
-      display: block;
+      object-fit: cover;
+    }
+    
+    /* For portrait mode */
+    .portrait-mode #scanner {
+      transform: rotate(0deg);
+    }
+    
+    /* For landscape mode */
+    .landscape-mode #scanner {
+      transform: rotate(90deg);
     }
     
     #scan-region {
@@ -140,6 +155,16 @@
       border-radius: 10px;
       box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.5);
       z-index: 1;
+    }
+    
+    .portrait-mode #scan-region {
+      height: 150px;
+      width: 80%;
+    }
+    
+    .landscape-mode #scan-region {
+      height: 150px;
+      width: 60%;
     }
     
     #close-scanner {
@@ -499,7 +524,7 @@
     fuelForm.classList.add("visible");
   }
 
-  // Improved barcode scanner using ZXing
+  // Improved barcode scanner with orientation handling
   let codeReader;
   let selectedDeviceId;
   let scanning = false;
@@ -507,12 +532,46 @@
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
 
+  // Handle orientation changes
+  window.addEventListener("orientationchange", handleOrientationChange);
+  
+  function handleOrientationChange() {
+    if (!scanning) return;
+    updateScannerOrientation();
+  }
+  
+  function updateScannerOrientation() {
+    const scannerWrapper = document.getElementById('scanner-wrapper');
+    
+    // Check if device is in portrait mode (0 or 180 degrees)
+    if (window.orientation === 0 || window.orientation === 180) {
+      scannerWrapper.classList.add('portrait-mode');
+      scannerWrapper.classList.remove('landscape-mode');
+    } else {
+      scannerWrapper.classList.add('landscape-mode');
+      scannerWrapper.classList.remove('portrait-mode');
+    }
+  }
+
   async function startScanner() {
     try {
       scannerContainer.style.display = "flex";
       codeReader = new ZXing.BrowserMultiFormatReader();
       
       const videoElement = document.getElementById('scanner');
+      
+      // Set initial orientation
+      updateScannerOrientation();
+      
+      // Try to lock screen orientation if supported
+      if (screen.orientation && screen.orientation.lock) {
+        try {
+          // Try to lock to current orientation
+          await screen.orientation.lock(screen.orientation.type);
+        } catch (orientationError) {
+          console.log("Orientation lock not supported:", orientationError);
+        }
+      }
       
       // List available video input devices
       const videoInputDevices = await codeReader.listVideoInputDevices();
@@ -539,7 +598,12 @@
       if (!selectedDeviceId && videoInputDevices.length > 0) {
         selectedDeviceId = videoInputDevices[0].deviceId;
       }
-
+      
+      // Configure hints for better VIN scanning
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODE_128]);
+      
       // Start decoding from the selected camera
       scanning = true;
       codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement, (result, error) => {
@@ -559,7 +623,7 @@
         if (error && !(error instanceof ZXing.NotFoundException)) {
           console.error('Scanner error:', error);
         }
-      });
+      }, hints);
       
     } catch (err) {
       console.error('Scanner initialization error:', err);
@@ -571,6 +635,11 @@
   function stopScanner() {
     scanning = false;
     scannerContainer.style.display = "none";
+    
+    // Release orientation lock if it was set
+    if (screen.orientation && screen.orientation.unlock) {
+      screen.orientation.unlock();
+    }
     
     if (codeReader) {
       codeReader.reset();
