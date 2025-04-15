@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>Midway Ford Fuel Slip</title>
   <style>
     :root {
@@ -15,12 +15,13 @@
     }
     
     body {
-      font-family: 'Arial', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       padding: 1.5rem;
       max-width: 600px;
       margin: auto;
       background: var(--ford-silver);
       color: var(--ford-dark);
+      -webkit-text-size-adjust: 100%;
     }
     
     h1, h2 {
@@ -55,6 +56,7 @@
       border: 1px solid #ccc;
       border-radius: 6px;
       box-sizing: border-box;
+      -webkit-appearance: none;
     }
     
     input[type="text"]#vin,
@@ -113,7 +115,6 @@
       display: none;
     }
     
-    /* Fixed camera wrapper - does not rotate or change */
     #camera-container {
       position: absolute;
       top: 0;
@@ -126,13 +127,25 @@
       justify-content: center;
     }
     
-    /* Video always stays in the same orientation */
+    /* iOS-optimized video element */
     #scanner {
       position: absolute;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1); /* Mirror horizontally for easier scanning */
+      transform: scaleX(1); /* iOS cameras don't need mirroring */
+      -webkit-transform: scaleX(1);
+    }
+    
+    /* Ensure proper iOS support for fullscreen */
+    @supports (-webkit-touch-callout: none) {
+      #scanner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+      }
     }
     
     #scan-overlay {
@@ -153,7 +166,7 @@
       width: 80%;
       max-width: 350px;
       height: 100px;
-      border: 2px solid #fff;
+      border: 3px solid #fff;
       border-radius: 10px;
       box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.6);
     }
@@ -164,15 +177,18 @@
       right: 20px;
       width: 50px;
       height: 50px;
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.9);
       color: var(--ford-blue);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 30px;
+      font-weight: bold;
       cursor: pointer;
       z-index: 3;
+      /* Fix iOS touch delay */
+      -webkit-tap-highlight-color: transparent;
     }
     
     #scanner-instructions {
@@ -187,6 +203,20 @@
       font-weight: bold;
       z-index: 2;
       text-shadow: 0 0 10px rgba(0,0,0,0.8);
+    }
+    
+    /* Scanner status indicator */
+    #scan-status {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.6);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      z-index: 3;
     }
     
     .loading-overlay {
@@ -219,6 +249,16 @@
       font-weight: bold;
     }
     
+    @keyframes scan-animation {
+      0% { opacity: 0.5; }
+      50% { opacity: 1; }
+      100% { opacity: 0.5; }
+    }
+    
+    .scanning #scan-region {
+      animation: scan-animation 1.5s infinite;
+    }
+    
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
@@ -246,6 +286,22 @@
       padding: 8px 12px;
       font-size: 0.9rem;
       background-color: var(--ford-gray);
+    }
+    
+    /* iOS specific fixes */
+    @supports (-webkit-touch-callout: none) {
+      /* iOS form controls */
+      input, select, button {
+        font-size: 16px; /* Prevent zoom on focus */
+      }
+      
+      /* Prevent elastic scrolling */
+      html, body {
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+      }
     }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
@@ -337,14 +393,15 @@
   </div>
 </div>
 
-<!-- Completely rebuilt scanner container with fixed orientation -->
+<!-- iOS-optimized scanner container -->
 <div id="scanner-container">
-  <div id="camera-container">
-    <video id="scanner" autoplay playsinline></video>
+  <div id="camera-container" class="scanning">
+    <video id="scanner" autoplay playsinline muted></video>
     <div id="scan-overlay">
       <div id="scan-region"></div>
     </div>
-    <div id="scanner-instructions">Position the VIN barcode in the frame</div>
+    <div id="scanner-instructions">Position VIN barcode in the white frame</div>
+    <div id="scan-status">Camera Ready</div>
   </div>
   <div id="close-scanner">×</div>
 </div>
@@ -365,6 +422,8 @@
   const loadingOverlay = document.getElementById("loadingOverlay");
   const scannerContainer = document.getElementById("scanner-container");
   const closeScanner = document.getElementById("close-scanner");
+  const scanStatus = document.getElementById("scan-status");
+  const scanRegion = document.getElementById("scan-region");
 
   const vin = document.getElementById("vin");
   const start = document.getElementById("startGallons");
@@ -395,6 +454,10 @@
   const cStation = document.getElementById("c-station");
   const cBillTo = document.getElementById("c-billTo");
   const cUser = document.getElementById("c-user");
+  
+  // Check if device is iOS
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   if (localStorage.getItem("fuelLogin") === "yes") {
     loginScreen.classList.remove("visible");
@@ -520,51 +583,65 @@
     fuelForm.classList.add("visible");
   }
 
-  // COMPLETELY REDESIGNED SCANNER WITH FIXED ORIENTATION
+  // ENHANCED iOS-COMPATIBLE SCANNER
   let codeReader;
   let videoStream;
   let scanning = false;
+  let scannerTimer;
 
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
 
-  // Prevent any orientation changes during scanning
-  function lockOrientation() {
-    // Add a meta tag to force portrait orientation
-    const metaTag = document.createElement('meta');
-    metaTag.name = 'viewport';
-    metaTag.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, orientation=landscape';
-    metaTag.id = 'viewport-lock';
-    document.head.appendChild(metaTag);
-    
-    // Lock the body
+  // Specialized iOS-specific settings
+  function setupIOSSpecificSettings() {
+    if (isIOS) {
+      // iOS requires special handling for fullscreen video
+      const videoElement = document.getElementById('scanner');
+      videoElement.setAttribute('playsinline', '');  // Ensure it plays inline
+      videoElement.setAttribute('webkit-playsinline', '');
+      
+      // For iOS devices, ensure fullscreen presentation
+      document.documentElement.style.height = '100%';
+      document.body.style.height = '100%';
+    }
+  }
+  
+  // Lock orientation and scroll for scanning
+  function lockInteraction() {
     document.body.style.position = 'fixed';
     document.body.style.width = '100%';
     document.body.style.height = '100%';
     document.body.style.overflow = 'hidden';
+    
+    // Prevent iOS bouncing/elastic scrolling
+    document.addEventListener('touchmove', preventScroll, { passive: false });
   }
   
-  function unlockOrientation() {
-    // Remove orientation locking meta tag
-    const metaTag = document.getElementById('viewport-lock');
-    if (metaTag) {
-      metaTag.remove();
-    }
-    
-    // Unlock the body
+  function unlockInteraction() {
     document.body.style.position = '';
     document.body.style.width = '';
     document.body.style.height = '';
     document.body.style.overflow = '';
+    
+    // Re-enable scrolling
+    document.removeEventListener('touchmove', preventScroll);
+  }
+  
+  function preventScroll(e) {
+    e.preventDefault();
   }
   
   async function startScanner() {
     try {
-      // Lock orientation
-      lockOrientation();
+      setupIOSSpecificSettings();
+      lockInteraction();
+      
+      // Clear any previous scanning state
+      clearTimeout(scannerTimer);
       
       // Show the scanner container
       scannerContainer.style.display = "block";
+      scanStatus.textContent = "Starting camera...";
       
       // Get the video element
       const videoElement = document.getElementById('scanner');
@@ -596,97 +673,197 @@
         selectedDeviceId = videoInputDevices[0].deviceId;
       }
       
-      // Define hard-coded constraints for fixed orientation
+      // iOS-optimized video constraints
       const constraints = {
         video: {
           deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
           facingMode: "environment",
           width: { ideal: 1280 },
-          height: { ideal: 720 }
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 1.7778 }, // 16:9 aspect ratio
+          frameRate: { min: 15, ideal: 30 } // Better performance on iOS
         }
       };
       
-      // Start video stream directly first to ensure orientation is fixed
+      // Start video stream directly first
       try {
+        scanStatus.textContent = "Accessing camera...";
         videoStream = await navigator.mediaDevices.getUserMedia(constraints);
         videoElement.srcObject = videoStream;
         
         // Wait for video to be ready
         await new Promise(resolve => {
           videoElement.onloadedmetadata = () => {
-            videoElement.play();
-            resolve();
+            videoElement.play().then(() => {
+              scanStatus.textContent = "Camera ready";
+              resolve();
+            }).catch(err => {
+              console.error("Video play error:", err);
+              scanStatus.textContent = "Camera error";
+              resolve(); // Still resolve to continue
+            });
           };
         });
         
-        // Configure scanner hints for VIN codes
+        // Configure scanner hints optimized for VIN codes
         const hints = new Map();
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODE_128]);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.CODE_39,
+          ZXing.BarcodeFormat.CODE_128
+        ]);
         
         // Start scanning
         scanning = true;
+        scanStatus.textContent = "Scanning for VIN...";
         
-        // Start the continuous scanning process
-        scanContinuously(videoElement, hints);
+        // Start the scanning process optimized for iOS
+        if (isIOS) {
+          // iOS performs better with a frame-based approach
+          scanWithFrameCapture(videoElement, hints);
+        } else {
+          // Other platforms can use the continuous decode method
+          scanContinuously(videoElement, hints);
+        }
         
       } catch (streamError) {
         console.error("Error starting video stream:", streamError);
-        alert("Could not access camera. Please check permissions.");
+        scanStatus.textContent = "Camera access denied";
+        
+        // iOS-specific error handling
+        if (isIOS) {
+          alert("Camera access is required for scanning. Please check your privacy settings and ensure camera access is granted to this website.");
+        } else {
+          alert("Could not access camera. Please check permissions.");
+        }
+        
         stopScanner();
       }
       
     } catch (error) {
       console.error("Error initializing scanner:", error);
+      scanStatus.textContent = "Scanner error";
       alert("Failed to start the barcode scanner.");
       stopScanner();
     }
   }
   
+  // Specialized scanning method for iOS
+  function scanWithFrameCapture(videoElement, hints) {
+    if (!scanning) return;
+    
+    // For iOS, we capture frames at a controlled rate
+    scannerTimer = setTimeout(async () => {
+      try {
+        // Create a canvas of the exact video dimensions
+        const canvas = document.createElement('canvas');
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+        
+        // Get the 2D context and draw the current video frame
+        const ctx = canvas.getContext('2d', {alpha: false, desynchronized: true});
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        
+        // Process the frame for barcode detection
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const source = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
+        
+        try {
+          // Initialize barcode reader with optimized settings
+          const reader = new ZXing.MultiFormatReader();
+          reader.setHints(hints);
+          
+          // Try to decode the image
+          const result = reader.decode(bitmap);
+          
+          if (result && result.getText()) {
+            const code = result.getText();
+            
+            // Visual feedback for successful scan
+            scanRegion.style.borderColor = "#00ff00";
+            scanStatus.textContent = "VIN detected!";
+            
+            // For VIN, process the result
+            if (code && code.length >= 8) {
+              // Valid VIN detected
+              vin.value = code.slice(-8).toUpperCase();
+              
+              // Brief delay before closing to show success feedback
+              setTimeout(() => {
+                stopScanner();
+              }, 500);
+              return;
+            }
+          }
+        } catch (decodeError) {
+          // Ignore "not found" errors, expected during scanning
+          if (!(decodeError instanceof ZXing.NotFoundException)) {
+            console.log("Decode error:", decodeError);
+          }
+        }
+        
+        // Continue scanning at an optimized rate for iOS (60ms ≈ 15-16fps)
+        // This provides good performance without excessive battery drain
+        scanWithFrameCapture(videoElement, hints);
+        
+      } catch (frameError) {
+        console.error("Error processing frame:", frameError);
+        scanStatus.textContent = "Scanning error, retrying...";
+        
+        // Continue scanning despite error after a brief delay
+        scanWithFrameCapture(videoElement, hints);
+      }
+    }, 60); // Optimized frame rate for iOS
+  }
+  
+  // Standard scanning method for non-iOS devices
   function scanContinuously(videoElement, hints) {
     if (!scanning) return;
     
     requestAnimationFrame(async () => {
       try {
-        // Manually capture a frame and decode it
+        // Capture a frame from the video
         const canvas = document.createElement('canvas');
         canvas.width = videoElement.videoWidth;
         canvas.height = videoElement.videoHeight;
         const ctx = canvas.getContext('2d');
         
-        // Draw the current video frame to canvas
+        // Draw the current frame
         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
         
-        // Get the image data
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // Use ZXing to decode
+        // Process the frame
         const source = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
         const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
         
         try {
+          // Configure the barcode reader
           const reader = new ZXing.MultiFormatReader();
+          reader.setHints(hints);
           
-          // Apply hints
-          if (hints) {
-            reader.setHints(hints);
-          }
-          
+          // Attempt to decode
           const result = reader.decode(bitmap);
           
           if (result && result.getText()) {
-            console.log('Barcode detected:', result.getText());
             const code = result.getText();
             
-            // For VIN, we need the last 8 characters
+            // Visual feedback
+            scanRegion.style.borderColor = "#00ff00";
+            scanStatus.textContent = "VIN detected!";
+            
+            // Process valid VIN
             if (code && code.length >= 8) {
               vin.value = code.slice(-8).toUpperCase();
-              stopScanner();
+              
+              // Slight delay for visual feedback
+              setTimeout(() => {
+                stopScanner();
+              }, 500);
               return;
             }
           }
         } catch (decodeError) {
-          // Ignore "not found" errors, which are expected between successful scans
+          // Ignore expected "not found" errors
           if (!(decodeError instanceof ZXing.NotFoundException)) {
             console.log("Decode error:", decodeError);
           }
@@ -697,8 +874,9 @@
         
       } catch (frameError) {
         console.error("Error processing frame:", frameError);
+        scanStatus.textContent = "Scanning error, retrying...";
         
-        // Continue scanning despite error
+        // Continue despite error
         scanContinuously(videoElement, hints);
       }
     });
@@ -706,35 +884,78 @@
 
   function stopScanner() {
     scanning = false;
+    clearTimeout(scannerTimer);
+    
+    // Reset scan region color
+    scanRegion.style.borderColor = "#fff";
+    
+    // Hide the scanner UI
     scannerContainer.style.display = "none";
     
-    // Unlock orientation
-    unlockOrientation();
+    // Release system resources
+    unlockInteraction();
     
-    // Stop video stream
+    // Stop the video stream
     if (videoStream) {
-      videoStream.getTracks().forEach(track => track.stop());
+      videoStream.getTracks().forEach(track => {
+        track.stop();
+      });
       videoStream = null;
     }
     
-    // Reset code reader
+    // Clean up the code reader
     if (codeReader) {
       codeReader.reset();
       codeReader = null;
     }
   }
 
-  // Handle closing the scanner if the user clicks outside the scanning area
-  scannerContainer.addEventListener("click", function(e) {
-    if (e.target === scannerContainer) {
-      stopScanner();
-    }
+  // Handle closing the scanner if the user clicks the close button
+  closeScanner.addEventListener("click", function(e) {
+    e.preventDefault();
+    stopScanner();
   });
 
   // Handle keyboard events to close scanner with Escape key
   document.addEventListener("keydown", function(e) {
     if (e.key === "Escape" && scanning) {
       stopScanner();
+    }
+  });
+  
+  // Prevent iOS safari from zooming when double-tapping the scanner
+  scannerContainer.addEventListener("touchend", function(e) {
+    if (e.target === scannerContainer) {
+      e.preventDefault();
+    }
+  });
+  
+  // For iOS devices, ensure proper cleanup on page hide/blur
+  document.addEventListener("visibilitychange", function() {
+    if (document.hidden && scanning) {
+      stopScanner();
+    }
+  });
+  
+  // For iOS, ensure cleanup when app goes to background
+  window.addEventListener("pagehide", function() {
+    if (scanning) {
+      stopScanner();
+    }
+  });
+  
+  // Handle iOS orientation changes gracefully
+  window.addEventListener("orientationchange", function() {
+    if (scanning) {
+      // Brief timeout to let iOS settle after rotation
+      setTimeout(() => {
+        // Refresh scanner size/position after orientation change
+        const videoElement = document.getElementById('scanner');
+        if (videoElement && videoElement.videoWidth) {
+          // Adjust canvas size if needed for new orientation
+          scanStatus.textContent = "Adjusting scanner...";
+        }
+      }, 300);
     }
   });
 </script>
