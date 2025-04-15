@@ -120,31 +120,24 @@
       position: relative;
       width: 100%;
       height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      overflow: hidden; /* Prevent any overflow */
     }
     
     #scanner {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      /* Force the video to be in landscape mode regardless of device orientation */
+      transform: rotate(0deg); /* Default no rotation */
     }
     
-    /* Camera orientation styles */
-    .environment-camera {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-    }
-    
+    /* Fixed scan region */
     #scan-region {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 80%;
+      width: 70%;
       height: 120px;
       border: 2px solid #fff;
       border-radius: 10px;
@@ -156,26 +149,8 @@
       position: absolute;
       top: 20px;
       right: 20px;
-      width: 50px;
-      height: 50px;
-      background: rgba(255, 255, 255, 0.8);
-      color: var(--ford-blue);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 30px;
-      cursor: pointer;
-      z-index: 2;
-      font-weight: bold;
-    }
-    
-    #flip-camera {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      width: 50px;
-      height: 50px;
+      width: 40px;
+      height: 40px;
       background: rgba(255, 255, 255, 0.8);
       color: var(--ford-blue);
       border-radius: 50%;
@@ -197,7 +172,28 @@
       padding: 10px;
       font-size: 16px;
       z-index: 2;
-      background-color: rgba(0, 0, 0, 0.5);
+    }
+    
+    /* Scanner controls */
+    #scanner-controls {
+      position: absolute;
+      bottom: 100px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      z-index: 2;
+    }
+    
+    #scanner-controls button {
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--ford-blue);
+      border: none;
+      border-radius: 20px;
+      padding: 8px 16px;
+      margin: 0 5px;
+      font-weight: bold;
+      width: auto;
     }
     
     .loading-overlay {
@@ -350,12 +346,15 @@
 
 <div id="scanner-container">
   <div id="scanner-wrapper">
-    <video id="scanner" class="environment-camera"></video>
+    <video id="scanner"></video>
     <div id="scan-region"></div>
     <div id="scanner-instructions">Position the VIN barcode within the frame</div>
+    <div id="scanner-controls">
+      <button id="rotate-ccw">Rotate Left</button>
+      <button id="rotate-cw">Rotate Right</button>
+    </div>
   </div>
   <div id="close-scanner">×</div>
-  <div id="flip-camera">⟳</div>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -374,7 +373,8 @@
   const loadingOverlay = document.getElementById("loadingOverlay");
   const scannerContainer = document.getElementById("scanner-container");
   const closeScanner = document.getElementById("close-scanner");
-  const flipCamera = document.getElementById("flip-camera");
+  const rotateClockwise = document.getElementById("rotate-cw");
+  const rotateCounterClockwise = document.getElementById("rotate-ccw");
 
   const vin = document.getElementById("vin");
   const start = document.getElementById("startGallons");
@@ -530,181 +530,135 @@
     fuelForm.classList.add("visible");
   }
 
-  // Completely revamped camera handling for flawless VIN scanning
+  // Improved barcode scanner with fixed orientation
   let codeReader;
   let selectedDeviceId;
   let scanning = false;
-  let availableCameras = [];
-  let currentCameraIndex = 0;
+  let currentRotation = 0; // Starting rotation angle (in degrees)
 
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
-  flipCamera.addEventListener("click", switchCamera);
+  
+  // Rotate camera view handlers
+  rotateClockwise.addEventListener("click", function() {
+    rotateCamera(90); // Rotate 90 degrees clockwise
+  });
+  
+  rotateCounterClockwise.addEventListener("click", function() {
+    rotateCamera(-90); // Rotate 90 degrees counter-clockwise
+  });
+  
+  function rotateCamera(degrees) {
+    const scanner = document.getElementById('scanner');
+    currentRotation = (currentRotation + degrees) % 360;
+    if (currentRotation < 0) currentRotation += 360; // Make sure we stay in the 0-359 range
+    
+    scanner.style.transform = `rotate(${currentRotation}deg)`;
+    
+    // Save the current rotation preference
+    localStorage.setItem('scannerRotation', currentRotation);
+  }
 
-  // Function to switch between available cameras
-  async function switchCamera() {
-    if (availableCameras.length <= 1) return;
-    
-    currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
-    
-    // Restart scanner with new camera
-    if (codeReader) {
-      codeReader.reset();
-      await initializeScanner();
-    }
+  // Completely disable orientation changes during scanning
+  function disableOrientationChange() {
+    // Disable orientation change by setting fixed styles
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    document.body.style.overflow = 'hidden';
+  }
+  
+  function enableOrientationChange() {
+    // Re-enable orientation change
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
+    document.body.style.overflow = '';
   }
 
   async function startScanner() {
     try {
       scannerContainer.style.display = "flex";
+      codeReader = new ZXing.BrowserMultiFormatReader();
       
-      if ('orientation' in screen) {
-        try {
-          // Always use portrait-primary for consistent orientation
-          await screen.orientation.lock('portrait-primary');
-        } catch (error) {
-          console.log('Screen orientation lock error:', error);
-        }
+      const videoElement = document.getElementById('scanner');
+      
+      // Disable orientation changes completely
+      disableOrientationChange();
+      
+      // Load saved rotation preference if available
+      const savedRotation = localStorage.getItem('scannerRotation');
+      if (savedRotation !== null) {
+        currentRotation = parseInt(savedRotation);
+        videoElement.style.transform = `rotate(${currentRotation}deg)`;
       }
       
-      await initializeScanner();
-      
-    } catch (err) {
-      console.error('Scanner initialization error:', err);
-      alert('Failed to start the barcode scanner. Please check your camera permissions.');
-      stopScanner();
-    }
-  }
-  
-  async function initializeScanner() {
-    codeReader = new ZXing.BrowserMultiFormatReader();
-    const videoElement = document.getElementById('scanner');
-    
-    try {
       // List available video input devices
-      availableCameras = await codeReader.listVideoInputDevices();
+      const videoInputDevices = await codeReader.listVideoInputDevices();
       
-      if (availableCameras.length === 0) {
+      if (videoInputDevices.length === 0) {
         alert('No camera devices found');
         stopScanner();
         return;
       }
       
-      // Show/hide flip camera button based on number of cameras
-      flipCamera.style.display = availableCameras.length > 1 ? 'flex' : 'none';
+      // Try to select the back camera (usually best for scanning)
+      selectedDeviceId = undefined;  // Default to system selection
       
-      // Try to select the back camera first (environment facing)
-      let environmentCamera = null;
-      for (const device of availableCameras) {
+      // Look for a back camera
+      for (const device of videoInputDevices) {
         if (device.label.toLowerCase().includes('back') || 
-            device.label.toLowerCase().includes('rear') ||
-            device.label.toLowerCase().includes('environment')) {
-          environmentCamera = device;
+            device.label.toLowerCase().includes('rear')) {
+          selectedDeviceId = device.deviceId;
           break;
         }
       }
       
-      // If we found an environment camera, set it as the selected device
-      if (environmentCamera) {
-        selectedDeviceId = environmentCamera.deviceId;
-        currentCameraIndex = availableCameras.findIndex(c => c.deviceId === selectedDeviceId);
-      } else {
-        // Otherwise use the current camera in the rotation
-        selectedDeviceId = availableCameras[currentCameraIndex].deviceId;
+      // If no back camera, use the first one
+      if (!selectedDeviceId && videoInputDevices.length > 0) {
+        selectedDeviceId = videoInputDevices[0].deviceId;
       }
       
-      // Configure advanced hints for better VIN barcode detection
+      // Configure hints for better VIN scanning
       const hints = new Map();
       hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.CODE_39, 
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.DATA_MATRIX
-      ]);
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODE_128]);
       
-      // Start scanning with selected camera
+      // Start decoding from the selected camera with fixed constraints
       scanning = true;
-      await codeReader.decodeFromVideoDevice(
-        selectedDeviceId, 
-        videoElement, 
-        (result, error) => {
-          if (!scanning) return;
-          
-          if (result) {
-            const code = result.getText();
-            console.log('Barcode detected:', code);
-            
-            // Process VIN code
-            if (code && code.length >= 8) {
-              const vinCode = code.length > 8 ? code.slice(-8) : code;
-              vin.value = vinCode.toUpperCase();
-              
-              // Create a "success" visual feedback
-              const scanRegion = document.getElementById('scan-region');
-              scanRegion.style.border = '2px solid #00ff00';
-              scanRegion.style.boxShadow = '0 0 10px #00ff00';
-              
-              // Wait a moment to show success before closing
-              setTimeout(() => {
-                stopScanner();
-              }, 500);
-            }
-          }
-          
-          if (error && !(error instanceof ZXing.NotFoundException)) {
-            console.error('Scanner error:', error);
-          }
-        },
-        hints
-      );
       
-      // Set video constraints for better scanning
-      const track = videoElement.srcObject.getVideoTracks()[0];
-      if (track) {
-        const capabilities = track.getCapabilities();
-        // Try to set focus mode to continuous if supported
-        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-          await track.applyConstraints({
-            advanced: [{focusMode: 'continuous'}]
-          });
+      // Use exact constraints to prevent orientation changes
+      const constraints = {
+        video: {
+          deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+      
+      codeReader.decodeFromConstraints(constraints, videoElement, (result, error) => {
+        if (!scanning) return;
+        
+        if (result) {
+          console.log('Barcode detected:', result.getText());
+          const code = result.getText();
+          
+          // For VIN, we need the last 8 characters
+          if (code && code.length >= 8) {
+            vin.value = code.slice(-8).toUpperCase();
+            stopScanner();
+          }
         }
         
-        // Try to enable torch if available and needed
-        if (capabilities.torch) {
-          // Create torch toggle button if torch is available
-          const torchButton = document.createElement('div');
-          torchButton.id = 'torch-toggle';
-          torchButton.style.position = 'absolute';
-          torchButton.style.bottom = '20px';
-          torchButton.style.left = '20px';
-          torchButton.style.width = '50px';
-          torchButton.style.height = '50px';
-          torchButton.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-          torchButton.style.borderRadius = '50%';
-          torchButton.style.display = 'flex';
-          torchButton.style.alignItems = 'center';
-          torchButton.style.justifyContent = 'center';
-          torchButton.style.fontSize = '24px';
-          torchButton.style.cursor = 'pointer';
-          torchButton.style.zIndex = '2';
-          torchButton.innerHTML = '💡';
-          
-          let torchOn = false;
-          torchButton.addEventListener('click', async () => {
-            torchOn = !torchOn;
-            await track.applyConstraints({
-              advanced: [{torch: torchOn}]
-            });
-            torchButton.style.backgroundColor = torchOn ? 'rgba(255, 255, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
-          });
-          
-          scannerContainer.appendChild(torchButton);
+        if (error && !(error instanceof ZXing.NotFoundException)) {
+          console.error('Scanner error:', error);
         }
-      }
+      }, hints);
       
-    } catch (error) {
-      console.error('Camera access error:', error);
-      alert('Error accessing the camera. Please check permissions.');
+    } catch (err) {
+      console.error('Scanner initialization error:', err);
+      alert('Failed to start the barcode scanner. Please check your camera permissions.');
       stopScanner();
     }
   }
@@ -713,32 +667,16 @@
     scanning = false;
     scannerContainer.style.display = "none";
     
-    // Release orientation lock
-    if ('orientation' in screen && screen.orientation.unlock) {
-      screen.orientation.unlock();
-    }
+    // Re-enable orientation changes
+    enableOrientationChange();
     
-    // Clean up
     if (codeReader) {
       codeReader.reset();
       codeReader = undefined;
     }
-    
-    // Remove any dynamically added elements
-    const torchButton = document.getElementById('torch-toggle');
-    if (torchButton) {
-      torchButton.remove();
-    }
-    
-    // Reset scan region styles
-    const scanRegion = document.getElementById('scan-region');
-    if (scanRegion) {
-      scanRegion.style.border = '2px solid #fff';
-      scanRegion.style.boxShadow = '0 0 0 5000px rgba(0, 0, 0, 0.5)';
-    }
   }
 
-  // Handle closing the scanner when clicking outside
+  // Handle closing the scanner if the user clicks outside the scanning area
   scannerContainer.addEventListener("click", function(e) {
     if (e.target === scannerContainer) {
       stopScanner();
@@ -749,6 +687,14 @@
   document.addEventListener("keydown", function(e) {
     if (e.key === "Escape" && scanning) {
       stopScanner();
+    }
+  });
+  
+  // Prevent any orientation change events from affecting the app during scanning
+  window.addEventListener("orientationchange", function() {
+    if (scanning) {
+      // Immediately reapply our fixed orientation settings
+      setTimeout(disableOrientationChange, 50);
     }
   });
 </script>
