@@ -331,6 +331,16 @@
         height: 100vh;
       }
     }
+    
+    /* Success animation */
+    @keyframes success-flash {
+      0% { background-color: rgba(40, 167, 69, 0.7); }
+      100% { background-color: rgba(40, 167, 69, 0); }
+    }
+    
+    .success-scan {
+      animation: success-flash 1s ease-out;
+    }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script>
@@ -444,7 +454,7 @@
   <div class="loading-text">Submitting fuel slip...</div>
 </div>
 
-<!-- ZXing and other libraries for reliable barcode scanning -->
+<!-- Simple direct barcode scanning libraries -->
 <script src="https://unpkg.com/@zxing/library@0.19.1"></script>
 <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 
@@ -614,51 +624,25 @@
     fuelForm.classList.add("visible");
   }
 
-  // ENHANCED BARCODE SCANNER IMPLEMENTATION
+  // SIMPLIFIED BARCODE SCANNER FOR FASTER SCANNING
   let videoStream;
   let scanning = false;
-  let previousScans = [];
-  let codeReader = null; 
-  let zxingReady = false;
-  let quaggaReady = false;
-  let activeScanner = null; // Track which scanner is active
-  
-  // VIN-specific settings
-  const MIN_VIN_LENGTH = 8; // Minimum number of characters to accept
-  const MAX_SCANS_TO_STORE = 5; // Number of recent scans to store for consensus
 
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
   manualCaptureBtn.addEventListener("click", captureBarcode);
 
-  // Initialize ZXing reader if available
-  try {
-    if (window.ZXing) {
-      codeReader = new ZXing.BrowserMultiFormatReader();
-      zxingReady = true;
-    }
-  } catch (e) {
-    console.warn('ZXing initialization failed, will fall back to Quagga:', e);
-  }
-
-  // Force landscape mode and set proper fullscreen
   function setupFullscreenLandscape() {
-    // Add scanning class to body to reset layout
     document.body.classList.add('scanning');
-    
-    // Make scanner container fullscreen
     scannerContainer.style.display = 'block';
     
-    // Try to lock to landscape if supported
     if (screen.orientation && screen.orientation.lock) {
       screen.orientation.lock('landscape').catch(e => {
         console.log('Orientation lock failed:', e);
       });
     }
     
-    // iOS specific adjustments
     if (isIOS) {
-      // Force layout for iOS
       document.documentElement.style.height = '100%';
       document.documentElement.style.width = '100%';
       document.body.style.height = '100%';
@@ -666,7 +650,6 @@
       document.body.style.position = 'fixed';
       document.body.style.overflow = 'hidden';
       
-      // Set transform on scanner container if needed
       if (window.matchMedia("(orientation: portrait)").matches) {
         scannerContainer.style.transform = 'rotate(90deg)';
         scannerContainer.style.transformOrigin = 'bottom left';
@@ -675,24 +658,18 @@
       }
     }
     
-    // Hide manual capture by default (show only if auto fails)
     manualCaptureBtn.style.display = 'none';
   }
   
   function cleanupFullscreenLandscape() {
-    // Remove scanning class from body
     document.body.classList.remove('scanning');
-    
-    // Reset scanner container
     scannerContainer.style.display = 'none';
     scannerContainer.style.transform = '';
     
-    // Unlock screen orientation if we locked it
     if (screen.orientation && screen.orientation.unlock) {
       screen.orientation.unlock();
     }
     
-    // iOS specific cleanup
     if (isIOS) {
       document.documentElement.style.height = '';
       document.documentElement.style.width = '';
@@ -702,7 +679,6 @@
       document.body.style.overflow = '';
     }
     
-    // Reset overlay/animations
     scanRegion.classList.remove('scanning');
   }
 
@@ -711,17 +687,20 @@
     scanRegion.classList.add('scanning');
     scanStatus.textContent = 'Starting camera...';
     barcodeResult.textContent = '';
-    previousScans = [];
     
     try {
-      // Try to get access to the camera with high resolution
+      // Use high-quality camera with autofocus when available
       const constraints = {
         audio: false,
         video: {
-          facingMode: 'environment', // Use back camera
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          aspectRatio: { ideal: 16/9 }
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 16/9 },
+          // Important settings for better barcode scanning
+          focusMode: 'continuous',
+          exposureMode: 'continuous',
+          whiteBalanceMode: 'continuous'
         }
       };
       
@@ -735,21 +714,21 @@
         };
       });
       
-      scanStatus.textContent = 'Scanning for barcodes...';
+      scanStatus.textContent = 'Scanning for VIN barcode...';
       
-      // Try ZXing first (more reliable) then fall back to Quagga
-      if (zxingReady) {
-        initZXingScanner();
+      // Use the simpler library for faster scanning
+      if (window.ZXing) {
+        initSimpleZXingScanner();
       } else {
-        initQuaggaScanner();
+        initSimpleQuaggaScanner();
       }
       
-      // Show manual capture button after a delay if no successful scan
+      // Show manual capture after a brief delay
       setTimeout(() => {
-        if (!scanning || previousScans.length === 0) {
+        if (scanning) {
           manualCaptureBtn.style.display = 'block';
         }
-      }, 8000);
+      }, 5000);
       
     } catch (err) {
       console.error('Error accessing camera:', err);
@@ -758,75 +737,83 @@
     }
   }
 
-  // Initialize ZXing scanner (more reliable option)
-  async function initZXingScanner() {
+  // Simplified ZXing scanner optimized for speed
+  function initSimpleZXingScanner() {
     try {
-      activeScanner = 'zxing';
       scanning = true;
       
-      // Start continuous scanning
+      const codeReader = new ZXing.BrowserMultiFormatReader();
+      const hints = new Map();
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      hints.set(ZXing.DecodeHintType.ASSUME_CODE_39_CHECK_DIGIT, false);
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODE_128]);
+      
       const deviceId = videoStream.getVideoTracks()[0].getSettings().deviceId;
       
-      codeReader.decodeFromVideoDevice(deviceId, 'scanner', (result, error) => {
-        if (result && !error) {
-          const code = result.getText().trim().toUpperCase();
+      // Frame interval - decrease for faster scanning
+      const scanInterval = 100; // ms between scans
+      let lastScanTime = 0;
+      
+      const scanFrame = () => {
+        if (!scanning) return;
+        
+        const now = Date.now();
+        if (now - lastScanTime >= scanInterval) {
+          lastScanTime = now;
           
-          // Only process valid VIN format codes
-          if (isValidVINFormat(code)) {
-            // Add to recent scans
-            previousScans.push(code);
-            
-            // Limit stored scans
-            if (previousScans.length > MAX_SCANS_TO_STORE) {
-              previousScans.shift();
-            }
-            
-            // Use consensus to improve accuracy
-            const mostFrequentCode = findMostFrequentCode(previousScans);
-            
-            // Show on overlay
-            barcodeResult.textContent = mostFrequentCode;
-            
-            // Get final result after several consistent scans
-            if (previousScans.length >= 2 && isConsistentScan(previousScans)) {
-              // Found a consistent barcode reading
-              stopScanner();
-              setVinResult(mostFrequentCode);
+          try {
+            codeReader.decodeFromVideoElement(videoElement, hints)
+              .then(result => {
+                if (result) {
+                  const code = result.getText().trim().toUpperCase();
+                  if (isValidVINFormat(code)) {
+                    // Found valid VIN
+                    handleSuccessfulScan(code);
+                  }
+                }
+              })
+              .catch(err => {
+                // Ignore errors, they happen when no barcode is found
+              })
+              .finally(() => {
+                if (scanning) {
+                  requestAnimationFrame(scanFrame);
+                }
+              });
+          } catch (e) {
+            if (scanning) {
+              requestAnimationFrame(scanFrame);
             }
           }
-        } else if (error) {
-          console.log('ZXing scan error:', error);
+        } else {
+          if (scanning) {
+            requestAnimationFrame(scanFrame);
+          }
         }
-      }).catch(err => {
-        console.error('ZXing scanner error:', err);
-        // Fall back to Quagga if ZXing fails
-        if (activeScanner === 'zxing') {
-          initQuaggaScanner();
-        }
-      });
-    } catch (err) {
-      console.error('ZXing initialization failed:', err);
-      // Fall back to Quagga
-      initQuaggaScanner();
+      };
+      
+      // Start scanning loop
+      requestAnimationFrame(scanFrame);
+      
+    } catch (e) {
+      console.error("ZXing init error:", e);
+      initSimpleQuaggaScanner();
     }
   }
 
-  // Initialize Quagga as a fallback option
-  function initQuaggaScanner() {
+  // Simplified Quagga scanner optimized for speed
+  function initSimpleQuaggaScanner() {
     if (!Quagga) {
       scanStatus.textContent = 'Barcode scanner not available';
       return;
     }
     
-    activeScanner = 'quagga';
     const width = videoElement.videoWidth;
     const height = videoElement.videoHeight;
     
-    // Set capture canvas dimensions to match video
     captureCanvas.width = width;
     captureCanvas.height = height;
     
-    // Configure Quagga for VIN scanning with optimized settings
     Quagga.init({
       inputStream: {
         name: "Live",
@@ -834,14 +821,13 @@
         target: videoElement,
         constraints: {
           width: width,
-          height: height,
-          aspectRatio: { min: 1, max: 2 }
+          height: height
         },
-        area: { // Narrower scanning area for better accuracy
-          top: "35%",
-          right: "15%",
-          left: "15%",
-          bottom: "35%"
+        area: { // Wider scanning area for easier detection
+          top: "25%",
+          right: "10%",
+          left: "10%",
+          bottom: "25%"
         }
       },
       locator: {
@@ -849,15 +835,11 @@
         halfSample: true
       },
       numOfWorkers: 4,
-      frequency: 10,
+      frequency: 5, // Scan more frequently
       decoder: {
         readers: [
-          "code_39_vin_reader", // Custom reader for VIN
-          "code_39_reader",     // Primary reader for VIN codes (most common)
-          "code_128_reader",    // Common in newer vehicles
-          "ean_reader",         // Backup reader
-          "upc_reader",         // Backup reader
-          "code_93_reader"      // Backup reader
+          "code_39_reader", // Primary for VIN codes
+          "code_128_reader" // Secondary for some vehicles
         ],
         multiple: false
       },
@@ -866,125 +848,63 @@
       if (err) {
         console.error('Quagga initialization failed', err);
         scanStatus.textContent = 'Scanner initialization failed';
-        // Show manual capture as fallback
         manualCaptureBtn.style.display = 'block';
         return;
       }
       
       scanning = true;
-      quaggaReady = true;
       Quagga.start();
       
-      // Handle barcode detection
-      Quagga.onDetected(handleBarcodeDetection);
+      // Success: Immediately handle the barcode
+      Quagga.onDetected(result => {
+        if (result && result.codeResult && result.codeResult.code) {
+          const code = result.codeResult.code.trim().toUpperCase();
+          
+          if (isValidVINFormat(code)) {
+            handleSuccessfulScan(code);
+          }
+        }
+      });
     });
-  }
-
-  // Custom Code 39 reader optimized for VIN codes
-  Quagga.registerReader('code_39_vin_reader', {
-    config: {
-      supplements: []
-    },
-    
-    decode: function(context) {
-      return Quagga.Decoder.SingleCodeReader.prototype._findPattern.call(this, 
-        Quagga.BARCODE_TYPES.CODE_39, context.line, context.threshold, {
-          minLength: 13 // VINs are typically 17 chars but we can detect partial codes
-        });
-    }
-  });
-
-  function handleBarcodeDetection(result) {
-    if (!result || !result.codeResult || !result.codeResult.code) return;
-    
-    const code = result.codeResult.code.trim().toUpperCase();
-    
-    // Only process valid VIN format codes
-    if (isValidVINFormat(code)) {
-      // Add to recent scans
-      previousScans.push(code);
-      
-      // Limit stored scans
-      if (previousScans.length > MAX_SCANS_TO_STORE) {
-        previousScans.shift();
-      }
-      
-      // Use consensus to improve accuracy
-      const mostFrequentCode = findMostFrequentCode(previousScans);
-      
-      // Show on overlay
-      barcodeResult.textContent = mostFrequentCode;
-      
-      // Get final result after several consistent scans
-      if (previousScans.length >= 2 && isConsistentScan(previousScans)) {
-        // Found a consistent barcode reading
-        stopScanner();
-        setVinResult(mostFrequentCode);
-      }
-    }
   }
 
   function isValidVINFormat(code) {
-    // Check if string could be a VIN (at least MIN_VIN_LENGTH chars, alphanumeric)
-    // VINs don't contain I, O, or Q to avoid confusion
-    return code && code.length >= MIN_VIN_LENGTH && /^[A-HJ-NPR-Z0-9]+$/.test(code);
+    // More permissive check for VIN codes (min 8 chars, alphanumeric)
+    return code && code.length >= 8 && /^[A-HJ-NPR-Z0-9]+$/.test(code);
   }
 
-  function findMostFrequentCode(codes) {
-    const frequency = {};
-    let maxFreq = 0;
-    let mostFrequent = '';
+  function handleSuccessfulScan(code) {
+    // Show result
+    barcodeResult.textContent = code;
     
-    codes.forEach(code => {
-      frequency[code] = (frequency[code] || 0) + 1;
-      if (frequency[code] > maxFreq) {
-        maxFreq = frequency[code];
-        mostFrequent = code;
-      }
-    });
+    // Add success effect
+    scanRegion.classList.remove('scanning');
+    scanRegion.classList.add('success-scan');
     
-    return mostFrequent;
-  }
-
-  function isConsistentScan(codes) {
-    // Check if we have multiple consistent scans
-    if (codes.length < 2) return false;
-    
-    // For ZXing (more reliable), just need 2 identical scans
-    if (activeScanner === 'zxing') {
-      const lastTwo = codes.slice(-2);
-      return lastTwo[0] === lastTwo[1];
-    }
-    
-    // For Quagga (less reliable), need 3 identical scans
-    const lastThree = codes.slice(-3);
-    if (lastThree.length < 3) {
-      const last = codes.slice(-2);
-      return last.length === 2 && last[0] === last[1];
-    }
-    
-    return lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2];
+    // Auto-close and set the VIN
+    setTimeout(() => {
+      setVinResult(code);
+      stopScanner();
+      
+      // Highlight the VIN field briefly to show it was filled
+      vin.style.backgroundColor = "#d4edda";
+      setTimeout(() => {
+        vin.style.backgroundColor = "";
+      }, 1500);
+      
+    }, 500); // Brief delay so user sees the scanned result
   }
 
   function setVinResult(vinCode) {
-    // Use the scanned VIN as-is (could be full or partial)
+    // Set the VIN field with the scanned code
     vin.value = vinCode;
   }
 
   function stopScanner() {
     scanning = false;
     
-    // Stop ZXing if active
-    if (activeScanner === 'zxing' && codeReader) {
-      try {
-        codeReader.reset();
-      } catch (e) {
-        console.log('Error stopping ZXing:', e);
-      }
-    }
-    
-    // Stop Quagga if active
-    if (activeScanner === 'quagga' && quaggaReady) {
+    // Stop Quagga if running
+    if (Quagga && Quagga.stop) {
       try {
         Quagga.stop();
       } catch (e) {
@@ -998,70 +918,20 @@
       videoElement.srcObject = null;
     }
     
-    // Reset variables
-    activeScanner = null;
-    
     // Reset UI/Layout
     cleanupFullscreenLandscape();
   }
 
-  // Manual capture as a fallback
+  // Simplified manual capture
   function captureBarcode() {
     if (!videoStream) return;
     
     try {
       const context = captureCanvas.getContext('2d');
       context.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+      scanStatus.textContent = 'Processing image...';
       
-      // Try both scanners for manual capture for best results
-      if (zxingReady) {
-        // Use ZXing to analyze the captured image
-        const img = captureCanvas.toDataURL('image/png');
-        const tmpImg = new Image();
-        tmpImg.src = img;
-        tmpImg.onload = () => {
-          try {
-            codeReader.decodeFromImage(tmpImg)
-              .then(result => {
-                if (result) {
-                  const code = result.getText().trim().toUpperCase();
-                  if (isValidVINFormat(code)) {
-                    stopScanner();
-                    setVinResult(code);
-                  } else {
-                    scanStatus.textContent = 'Invalid VIN format. Try again.';
-                    // Fall back to Quagga
-                    tryQuaggaManualCapture();
-                  }
-                } else {
-                  // Fall back to Quagga
-                  tryQuaggaManualCapture();
-                }
-              })
-              .catch(err => {
-                console.error('ZXing manual decode error:', err);
-                // Fall back to Quagga
-                tryQuaggaManualCapture();
-              });
-          } catch (e) {
-            console.error('ZXing manual capture error:', e);
-            // Fall back to Quagga
-            tryQuaggaManualCapture();
-          }
-        };
-      } else {
-        // Use Quagga directly if ZXing not available
-        tryQuaggaManualCapture();
-      }
-    } catch (e) {
-      console.error('Manual capture error:', e);
-      scanStatus.textContent = 'Capture failed. Try again.';
-    }
-  }
-  
-  function tryQuaggaManualCapture() {
-    try {
-      // Use Quagga to detect in still image
+      // Try with Quagga for simplicity
       Quagga.decodeSingle({
         src: captureCanvas.toDataURL(),
         numOfWorkers: 0,
@@ -1072,19 +942,16 @@
         decoder: {
           readers: [
             "code_39_reader",
-            "code_128_reader",
-            "ean_reader",
-            "upc_reader",
-            "code_93_reader"
+            "code_128_reader"
           ]
         },
-        locate: true
+        locate: true,
+        singleChannel: false
       }, function(result) {
         if (result && result.codeResult) {
           const code = result.codeResult.code.trim().toUpperCase();
           if (isValidVINFormat(code)) {
-            stopScanner();
-            setVinResult(code);
+            handleSuccessfulScan(code);
           } else {
             scanStatus.textContent = 'Invalid VIN format. Try again.';
           }
@@ -1092,40 +959,13 @@
           scanStatus.textContent = 'No barcode detected. Try again.';
         }
       });
-    } catch (err) {
-      console.error('Quagga manual capture error:', err);
+    } catch (e) {
+      console.error('Manual capture error:', e);
       scanStatus.textContent = 'Capture failed. Try again.';
     }
   }
   
-  // Custom Code 39 handler to improve VIN scanning
-  if (Quagga) {
-    // Extend Code 39 to be more lenient with VIN codes
-    const originalCode39 = Quagga.Decoder.Readers.Code39Reader.prototype;
-    const originalDecode = originalCode39.decode;
-    
-    Quagga.Decoder.Readers.Code39Reader.prototype.decode = function() {
-      try {
-        return originalDecode.apply(this, arguments);
-      } catch (e) {
-        // Custom recovery logic for partial VIN scans
-        if (this._row && this._row.length > 14) { // Minimum size for a partial VIN
-          // Try more aggressive decoding with relaxed start/stop pattern detection
-          return this._tryVinParse(this._row);
-        }
-        throw e;
-      }
-    };
-    
-    // Add method to try more lenient VIN parsing
-    Quagga.Decoder.Readers.Code39Reader.prototype._tryVinParse = function(row) {
-      // Simplified Code 39 parsing focused on the pattern of VINs
-      // This is a simplified example - in production would need more robust implementation
-      return null; // Fallback to standard parsing
-    };
-  }
-  
-  // Clean up resources when leaving the page
+  // Handle page unload
   window.addEventListener('beforeunload', () => {
     if (scanning) {
       stopScanner();
