@@ -830,13 +830,13 @@
       orientationGuide.style.display = 'none';
       detectedOverlay.style.display = 'none';
       
-      // Configure camera for highest quality available
+      // Configure camera for moderate quality to avoid performance issues
       const constraints = {
         audio: false,
         video: {
           facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           frameRate: { ideal: 30 }
         }
       };
@@ -848,23 +848,29 @@
       // Wait for video to be ready
       await new Promise(resolve => {
         videoElement.onloadedmetadata = () => {
-          videoElement.play().then(resolve);
+          videoElement.play().then(resolve).catch(err => {
+            console.error("Error playing video:", err);
+            resolve(); // Resolve anyway to continue
+          });
         };
       });
       
       scanning = true;
       scanStatus.textContent = 'Scanning for VIN barcode...';
       
-      // Use multiple methods to maximize chances of detection
-      startAllScanningMethods();
-      
-      // Show guide after a delay if no barcode detected
+      // Wait a moment for video to stabilize before starting scanners
       setTimeout(() => {
-        if (scanning && potentialVinCodes.size === 0) {
-          orientationGuide.style.display = 'block';
-          scannerInstructions.textContent = 'Try different lighting or distance';
-        }
-      }, 5000);
+        // Use multiple methods to maximize chances of detection
+        startAllScanningMethods();
+        
+        // Show guide after a delay if no barcode detected
+        setTimeout(() => {
+          if (scanning && potentialVinCodes.size === 0) {
+            orientationGuide.style.display = 'block';
+            scannerInstructions.textContent = 'Try different lighting or distance';
+          }
+        }, 5000);
+      }, 500);
       
     } catch (err) {
       console.error('Error accessing camera:', err);
@@ -878,9 +884,14 @@
     initializeQuaggaScanner();
     
     // 2. Start ZXing scanner (good for various barcode formats)
-    initializeZXingScanner();
+    // Start ZXing with a small delay to prevent conflicts
+    setTimeout(() => {
+      if (scanning) {
+        initializeZXingScanner();
+      }
+    }, 1000);
     
-    // 3. Set up fallback interval captures
+    // 3. Set up fallback interval captures at a lower frequency
     startCaptureIntervals();
   }
   
@@ -894,31 +905,29 @@
         inputStream: {
           name: "Live",
           type: "LiveStream",
-          target: videoElement,
           constraints: {
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
             facingMode: "environment"
+          },
+          target: videoElement,   // Use the existing video element
+          area: { // Only search in center of the video
+            top: "20%",
+            right: "10%",
+            left: "10%",
+            bottom: "20%",
           }
         },
         locator: {
           patchSize: "medium",
           halfSample: true
         },
-        numOfWorkers: 4,
-        frequency: 10,
+        numOfWorkers: 2,  // Reduced for better performance
+        frequency: 5,     // Reduced frequency
         decoder: {
           readers: [
-            {
-              format: "code_39_reader",
-              config: {
-                supplements: []
-              }
-            },
-            {
-              format: "code_128_reader",
-              config: {
-                supplements: []
-              }
-            }
+            "code_39_reader",
+            "code_128_reader"
           ],
           multiple: false
         },
@@ -938,7 +947,11 @@
           
           quaggaAttempts++;
           const code = result.codeResult.code.trim().toUpperCase();
-          processDetectedCode(code, result.codeResult.confidence || 0, 'Quagga');
+          
+          // Only process if valid
+          if (code && VIN_REGEX.test(code)) {
+            processDetectedCode(code, result.codeResult.confidence || 0, 'Quagga');
+          }
         });
       });
     } catch (err) {
@@ -967,23 +980,28 @@
         if (!scanning || !zxingActive) return;
         
         try {
-          zxingAttempts++;
-          
-          // Decode the current video frame
-          codeReader.decodeFromVideoElement(videoElement)
-            .then(result => {
-              if (result && result.text) {
-                const code = result.text.trim().toUpperCase();
-                processDetectedCode(code, 80, 'ZXing'); // ZXing doesn't provide confidence
-              }
-            })
-            .catch(() => {
-              // Silently fail - this is expected for frames without codes
-            });
+          // Only attempt to decode if we have enough video data
+          if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+            zxingAttempts++;
+            
+            // Decode the current video frame
+            codeReader.decodeFromVideoElement(videoElement)
+              .then(result => {
+                if (result && result.text) {
+                  const code = result.text.trim().toUpperCase();
+                  if (VIN_REGEX.test(code)) {
+                    processDetectedCode(code, 80, 'ZXing'); // ZXing doesn't provide confidence
+                  }
+                }
+              })
+              .catch(() => {
+                // Silently fail - this is expected for frames without codes
+              });
+          }
         } catch (e) {
           // Ignore errors
         }
-      }, 300);
+      }, 700); // Increased interval to reduce processing load
     } catch (err) {
       console.log("Error in ZXing setup:", err);
       zxingActive = false;
@@ -994,18 +1012,23 @@
     // Clear any existing intervals
     if (scanInterval) clearInterval(scanInterval);
     
-    // Set up manual capture every 500ms as fallback
+    // Set up manual capture at a lower frequency to prevent overload
     scanInterval = setInterval(() => {
-      if (scanning) {
+      if (scanning && videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
         manualAttempts++;
         captureFrameAndDecode(true);
       }
-    }, 500);
+    }, 1000); // Reduced frequency for better performance
   }
   
   function processDetectedCode(code, confidence, source = 'Manual') {
     // Skip if not a plausible VIN code
     if (!code || !VIN_REGEX.test(code)) return;
+    
+    // Avoid processing too frequently
+    const now = Date.now();
+    if (now - lastProcessedTime < 300) return;
+    lastProcessedTime = now;
     
     // Track detection count for this code
     if (!potentialVinCodes.has(code)) {
@@ -1043,7 +1066,7 @@
       setTimeout(() => {
         setVinResult(code);
         stopScanner();
-      }, 300);
+      }, 500);
     } else {
       scanStatus.textContent = `Possible VIN (${source}): Confirming...`;
     }
@@ -1053,6 +1076,11 @@
     if (!videoStream || !scanning) return;
     
     try {
+      // Only proceed if video has data and is playing
+      if (videoElement.readyState !== videoElement.HAVE_ENOUGH_DATA) {
+        return;
+      }
+      
       const context = captureCanvas.getContext('2d');
       const videoWidth = videoElement.videoWidth;
       const videoHeight = videoElement.videoHeight;
@@ -1068,23 +1096,24 @@
       context.drawImage(videoElement, 0, 0, videoWidth, videoHeight);
       
       // Process with Quagga's static decoder
-      const imageData = captureCanvas.toDataURL('image/jpeg', 0.9);
+      const imageData = captureCanvas.toDataURL('image/jpeg', 0.7); // Lower quality for performance
       
       Quagga.decodeSingle({
         src: imageData,
-        numOfWorkers: 2,
+        numOfWorkers: 1, // Reduced for better performance
         locate: true,
         decoder: {
           readers: [
             "code_39_reader",
-            "code_128_reader",
-            "code_93_reader"
+            "code_128_reader"
           ]
         }
       }, function(result) {
         if (result && result.codeResult) {
           const code = result.codeResult.code.trim().toUpperCase();
-          processDetectedCode(code, result.codeResult.confidence || 0, 'Manual');
+          if (VIN_REGEX.test(code)) {
+            processDetectedCode(code, result.codeResult.confidence || 0, 'Manual');
+          }
         }
       });
     } catch (e) {
