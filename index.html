@@ -682,9 +682,10 @@
     fuelForm.classList.add("visible");
   }
 
-  // SIMPLIFIED BARCODE SCANNING APPROACH
+  // IMPROVED BARCODE SCANNING SYSTEM
   let videoStream;
   let scanning = false;
+  let quaggaInitialized = false;
 
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
@@ -717,45 +718,32 @@
     }
   }
 
-  // Fixed portrait mode setup
-  function setupPortraitScanner() {
-    document.body.classList.add('scanning');
-    scannerContainer.style.display = 'block';
-    
-    // Cancel any previous orientation lock request
-    if (screen.orientation && screen.orientation.unlock) {
-      screen.orientation.unlock();
-    }
-    
-    manualCaptureBtn.style.display = 'block';
-    showManualInputBtn.style.display = 'block';
-    manualInputContainer.style.display = 'none';
-  }
-  
-  function cleanupScanner() {
-    document.body.classList.remove('scanning');
-    scannerContainer.style.display = 'none';
-    manualInputContainer.style.display = 'none';
-    scanRegion.classList.remove('scanning');
-  }
-
   async function startScanner() {
-    setupPortraitScanner();
-    scanRegion.classList.add('scanning');
-    scanStatus.textContent = 'Starting camera...';
-    barcodeResult.textContent = '';
-    
     try {
-      // Use portrait mode settings for the camera
+      document.body.classList.add('scanning');
+      scannerContainer.style.display = 'block';
+      scanRegion.classList.add('scanning');
+      scanStatus.textContent = 'Starting camera...';
+      barcodeResult.textContent = '';
+      manualInputContainer.style.display = 'none';
+      
+      // Cancel any previous orientation lock
+      if (screen.orientation && screen.orientation.unlock) {
+        screen.orientation.unlock();
+      }
+      
+      // Configure camera constraints
       const constraints = {
         audio: false,
         video: {
           facingMode: 'environment',
           width: { ideal: 1280 },
-          height: { ideal: 720 }
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 1.777 }
         }
       };
       
+      // Get camera access
       videoStream = await navigator.mediaDevices.getUserMedia(constraints);
       videoElement.srcObject = videoStream;
       
@@ -766,15 +754,85 @@
         };
       });
       
-      scanStatus.textContent = 'Ready to capture barcode';
+      // Initialize Quagga for real-time scanning
+      initializeQuaggaScanner();
       
+      scanStatus.textContent = 'Scanning for VIN barcode...';
+      scanning = true;
     } catch (err) {
       console.error('Error accessing camera:', err);
-      scanStatus.textContent = 'Camera access failed';
+      scanStatus.textContent = 'Camera access failed. Try manual input.';
+    }
+  }
+  
+  function initializeQuaggaScanner() {
+    if (quaggaInitialized) {
+      Quagga.stop();
+    }
+    
+    Quagga.init({
+      inputStream: {
+        name: "Live",
+        type: "LiveStream",
+        target: videoElement,
+        constraints: {
+          facingMode: "environment"
+        },
+      },
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+      numOfWorkers: 2,
+      decoder: {
+        readers: [
+          "code_39_reader",
+          "code_128_reader"
+        ],
+        multiple: false
+      },
+      locate: true
+    }, function(err) {
+      if (err) {
+        console.error("Quagga initialization failed:", err);
+        scanStatus.textContent = "Scanner initialization failed";
+        return;
+      }
+      
+      quaggaInitialized = true;
+      
+      // Start real-time scanning
+      Quagga.start();
+      
+      // Listen for barcode detection
+      Quagga.onDetected(handleBarcodeDetection);
+    });
+  }
+  
+  function handleBarcodeDetection(result) {
+    if (!scanning) return;
+    
+    const code = result.codeResult.code.trim().toUpperCase();
+    
+    // Validate VIN format - typically 17 characters, but we'll accept 8+ alphanumeric
+    if (code && code.length >= 8 && /^[A-Z0-9]+$/.test(code)) {
+      // Show success feedback
+      barcodeResult.textContent = code;
+      scanStatus.textContent = 'VIN detected!';
+      scanRegion.classList.add('success-scan');
+      
+      // Prevent multiple detections by setting scanning to false temporarily
+      scanning = false;
+      
+      // Process the detected VIN after a short delay
+      setTimeout(() => {
+        setVinResult(code);
+        stopScanner();
+      }, 800);
     }
   }
 
-  // Capture barcode from still image
+  // Capture barcode from still image (backup method)
   function captureBarcode() {
     if (!videoStream) {
       scanStatus.textContent = 'Camera not available';
@@ -796,7 +854,7 @@
       context.drawImage(videoElement, 0, 0, videoWidth, videoHeight);
       
       // Get the image data URL
-      const imageDataUrl = captureCanvas.toDataURL('image/jpeg', 0.8);
+      const imageDataUrl = captureCanvas.toDataURL('image/jpeg', 0.9);
       
       // Use Quagga to decode the barcode in the still image
       Quagga.decodeSingle({
@@ -816,6 +874,7 @@
           if (code && code.length >= 8 && /^[A-Z0-9]+$/.test(code)) {
             barcodeResult.textContent = code;
             scanStatus.textContent = 'VIN detected!';
+            scanRegion.classList.add('success-scan');
             
             // Auto-fill the VIN field and close the scanner
             setTimeout(() => {
@@ -849,6 +908,11 @@
   function stopScanner() {
     scanning = false;
     
+    // Stop Quagga scanner
+    if (quaggaInitialized) {
+      Quagga.stop();
+    }
+    
     // Stop video stream
     if (videoStream) {
       videoStream.getTracks().forEach(track => {
@@ -860,13 +924,20 @@
     }
     
     // Reset UI/Layout
-    cleanupScanner();
+    document.body.classList.remove('scanning');
+    scannerContainer.style.display = 'none';
+    manualInputContainer.style.display = 'none';
+    scanRegion.classList.remove('scanning');
+    scanRegion.classList.remove('success-scan');
   }
   
   // Handle page unload
   window.addEventListener('beforeunload', () => {
     if (videoStream) {
       videoStream.getTracks().forEach(track => track.stop());
+    }
+    if (quaggaInitialized) {
+      Quagga.stop();
     }
   });
 </script>
