@@ -117,28 +117,115 @@
       flex-direction: column;
     }
     
+    #scanner-container.visible {
+      display: flex;
+    }
+    
     #reader {
       width: 100%;
       height: 100%;
+      position: relative;
+    }
+    
+    #scanner-header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.5);
+    }
+    
+    #scanner-title {
+      color: white;
+      font-weight: bold;
+      margin: 0;
+      font-size: 18px;
     }
     
     #close-scanner {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      width: 50px;
-      height: 50px;
+      width: 36px;
+      height: 36px;
       background: rgba(255, 255, 255, 0.9);
       color: var(--ford-blue);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 30px;
+      font-size: 24px;
       font-weight: bold;
       cursor: pointer;
-      z-index: 3;
       -webkit-tap-highlight-color: transparent;
+    }
+    
+    #scan-status {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      padding: 15px;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      text-align: center;
+      font-weight: bold;
+      z-index: 10;
+    }
+    
+    /* Scan area overlay */
+    #scan-area-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    #scan-area {
+      width: 280px;
+      height: 160px;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      border-radius: 10px;
+      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+    
+    #scan-area::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 8px;
+      border: 2px solid rgba(0, 114, 206, 0.6);
+      animation: scan-animation 2s infinite;
+    }
+    
+    #scan-area::after {
+      content: "Position VIN barcode here";
+      position: absolute;
+      top: -30px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 14px;
+      text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+    }
+    
+    @keyframes scan-animation {
+      0% { border-color: rgba(0, 114, 206, 0.6); }
+      50% { border-color: rgba(255, 255, 255, 0.9); }
+      100% { border-color: rgba(0, 114, 206, 0.6); }
     }
     
     .loading-overlay {
@@ -220,26 +307,42 @@
       overflow: hidden;
     }
     
-    /* Customize the scanner UI */
-    #scanner-container {
-      display: none;
+    /* Customize html5-qrcode styles */
+    #reader * button {
+      border-radius: 4px !important;
     }
     
-    #scanner-container.visible {
-      display: flex;
+    #reader video {
+      object-fit: cover !important;
     }
     
-    /* Adjust the built-in html5-qrcode UI */
-    #scanner-container button {
-      background-color: var(--ford-blue);
-      color: white;
-      border-radius: 6px;
-      font-weight: bold;
+    #reader__scan_region img {
+      display: none !important;
     }
     
-    #scanner-container select {
-      border-radius: 6px;
-      padding: 8px;
+    #reader__dashboard_section_csr button {
+      background: var(--ford-blue) !important;
+      border: none !important;
+      color: white !important;
+      border-radius: 4px !important;
+      padding: 8px 15px !important;
+    }
+    
+    #reader__dashboard_section_swaplink {
+      color: white !important;
+      background: rgba(0, 0, 0, 0.5) !important;
+      padding: 5px 10px !important;
+      border-radius: 4px !important;
+      text-decoration: none !important;
+    }
+    
+    #reader__camera_selection {
+      border-radius: 4px !important;
+      padding: 8px !important;
+    }
+    
+    #reader__dashboard {
+      margin: 8px !important;
     }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
@@ -332,10 +435,20 @@
   </div>
 </div>
 
-<!-- Scanner container -->
+<!-- Scanner container with improved UI -->
 <div id="scanner-container">
+  <div id="scanner-header">
+    <div id="scanner-title">Scan VIN Barcode</div>
+    <div id="close-scanner">×</div>
+  </div>
+  
   <div id="reader"></div>
-  <div id="close-scanner">×</div>
+  
+  <div id="scan-area-container">
+    <div id="scan-area"></div>
+  </div>
+  
+  <div id="scan-status">Preparing camera...</div>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -344,6 +457,7 @@
 </div>
 
 <script>
+  // Global variables and DOM references
   const loginScreen = document.getElementById("loginScreen");
   const fuelForm = document.getElementById("fuelForm");
   const confirmationPage = document.getElementById("confirmationPage");
@@ -352,6 +466,7 @@
   const scannerContainer = document.getElementById("scanner-container");
   const closeScanner = document.getElementById("close-scanner");
   const scanBtn = document.getElementById("scanBtn");
+  const scanStatus = document.getElementById("scan-status");
 
   const vin = document.getElementById("vin");
   const start = document.getElementById("startGallons");
@@ -364,6 +479,7 @@
 
   // HTML5 QR code scanner instance
   let html5QrCode;
+  let cameraId;
 
   const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
   date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
@@ -504,43 +620,85 @@
   }
 
   // Scanner implementation with html5-qrcode
-  function startScanner() {
+  async function startScanner() {
     document.body.classList.add('scanning');
     scannerContainer.classList.add('visible');
+    scanStatus.textContent = "Accessing camera...";
     
     // Create scanner instance if it doesn't exist
     if (!html5QrCode) {
       html5QrCode = new Html5Qrcode("reader");
     }
     
-    const qrConfig = { 
-      fps: 10,
-      qrbox: { width: 250, height: 150 },
-      formatsToSupport: [ 
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.CODE_128
-      ]
-    };
-    
-    // Start scanner with default camera
-    html5QrCode.start(
-      { facingMode: "environment" }, 
-      qrConfig,
-      onScanSuccess,
-      onScanFailure
-    ).catch(err => {
+    try {
+      // First get all cameras
+      const devices = await Html5Qrcode.getCameras();
+      if (devices && devices.length) {
+        // Find a back camera
+        let backCamera = null;
+        
+        // First try to find a camera with "back" in the label
+        for (const device of devices) {
+          if (device.label.toLowerCase().includes('back')) {
+            backCamera = device.id;
+            break;
+          }
+        }
+        
+        // If no back camera found, use the last device (usually the back camera)
+        if (!backCamera && devices.length > 1) {
+          backCamera = devices[devices.length - 1].id;
+        } else if (!backCamera) {
+          // If still no camera found, use the first one
+          backCamera = devices[0].id;
+        }
+        
+        cameraId = backCamera;
+        
+        // Configure scanner
+        const config = {
+          fps: 10,
+          qrbox: { width: 250, height: 150 },
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.CODE_128
+          ]
+        };
+        
+        // Start scanner with selected camera
+        scanStatus.textContent = "Starting camera...";
+        await html5QrCode.start(
+          cameraId, 
+          config,
+          onScanSuccess,
+          onScanProgress
+        );
+        
+        scanStatus.textContent = "Position VIN barcode in the box";
+      } else {
+        scanStatus.textContent = "No cameras found";
+        setTimeout(stopScanner, 2000);
+      }
+    } catch (err) {
       console.error("Error starting scanner:", err);
-      alert("Could not access camera. Please check permissions and try again.");
-      stopScanner();
-    });
+      scanStatus.textContent = "Camera access failed";
+      
+      // Wait 2 seconds and close scanner
+      setTimeout(stopScanner, 2000);
+    }
   }
 
+  // Called on each successful scan
   function onScanSuccess(decodedText, decodedResult) {
     // Process scanned code
     const scannedCode = decodedText.trim().toUpperCase();
+    console.log("Scanned code:", scannedCode);
     
     // Check if it's plausibly a VIN (alphanumeric, at least 8 chars)
     if (scannedCode && scannedCode.length >= 8 && /^[A-Z0-9]+$/.test(scannedCode)) {
+      // Update status
+      scanStatus.textContent = "VIN detected! Closing scanner...";
+      
       // Set VIN value
       vin.value = scannedCode;
       
@@ -550,24 +708,27 @@
         vin.style.backgroundColor = "";
       }, 1500);
       
-      // Stop scanner and close
-      stopScanner();
+      // Stop scanner after short delay
+      setTimeout(stopScanner, 1000);
     }
   }
 
-  function onScanFailure(error) {
-    // Handle scan errors if needed
-    console.log(`Scan failure: ${error}`);
+  // Called on each scan attempt (success or failure)
+  function onScanProgress(errorMessage, errorCode) {
     // We don't need to show any message for continuous scanning failures
+    // But we could update UI here if needed
   }
 
-  function stopScanner() {
-    if (html5QrCode && html5QrCode.isScanning) {
-      html5QrCode.stop().then(() => {
-        console.log('Scanner stopped');
-      }).catch(err => {
+  // Stop scanner and cleanup
+  async function stopScanner() {
+    if (html5QrCode) {
+      try {
+        if (html5QrCode.isScanning) {
+          await html5QrCode.stop();
+        }
+      } catch (err) {
         console.error('Error stopping scanner:', err);
-      });
+      }
     }
     
     document.body.classList.remove('scanning');
@@ -578,10 +739,14 @@
   scanBtn.addEventListener("click", startScanner);
   closeScanner.addEventListener("click", stopScanner);
   
-  // Handle page unload
+  // Handle page unload - cleanup
   window.addEventListener('beforeunload', () => {
     if (html5QrCode && html5QrCode.isScanning) {
-      html5QrCode.stop().catch(() => {});
+      try {
+        html5QrCode.stop().catch(() => {});
+      } catch (e) {
+        // Ignore any errors during cleanup
+      }
     }
   });
 </script>
