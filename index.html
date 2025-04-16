@@ -333,7 +333,10 @@
     emailjs.init("c7_t3EOBwGHFIPCKm");
   </script>
   
-  <!-- Quagga JS for barcode scanning -->
+  <!-- ZXing for more reliable barcode scanning -->
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+  
+  <!-- Quagga JS as fallback scanner -->
   <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 </head>
 <body>
@@ -431,6 +434,7 @@
   <div id="interactive" class="viewport"></div>
   
   <div id="scanner-buttons">
+    <button id="scanner-torch">Toggle Flashlight</button>
     <button id="manual-button">Enter VIN Manually</button>
   </div>
   
@@ -473,32 +477,14 @@
   const scannerMessage = document.getElementById("scanner-message");
   const scannerResult = document.getElementById("scanner-result");
   const scannerClose = document.getElementById("scanner-close");
+  const scannerTorch = document.getElementById("scanner-torch");
   const manualButton = document.getElementById("manual-button");
   const manualInput = document.getElementById("manual-input");
   const manualVin = document.getElementById("manual-vin");
   const confirmManual = document.getElementById("confirm-manual");
   const cancelManual = document.getElementById("cancel-manual");
   
-  // Confirmation fields
-  const confVin = document.getElementById("conf-vin");
-  const confStart = document.getElementById("conf-start");
-  const confEnd = document.getElementById("conf-end");
-  const confUsed = document.getElementById("conf-used");
-  const confDate = document.getElementById("conf-date");
-  const confStation = document.getElementById("conf-station");
-  const confBillTo = document.getElementById("conf-billTo");
-  const confUser = document.getElementById("conf-user");
-
-  const cVin = document.getElementById("c-vin");
-  const cStart = document.getElementById("c-start");
-  const cEnd = document.getElementById("c-end");
-  const cUsed = document.getElementById("c-used");
-  const cDate = document.getElementById("c-date");
-  const cStation = document.getElementById("c-station");
-  const cBillTo = document.getElementById("c-billTo");
-  const cUser = document.getElementById("c-user");
-  
-  // VIN validation pattern - Ford VINs typically start with 1F
+  // VIN validation - Ford VINs typically start with 1F
   const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{8,17}$/i;
   
   // Set current date
@@ -628,9 +614,13 @@
 
   // ------- BARCODE SCANNER CODE -------
   
+  let codeReader = null;
   let quaggaState = false;
   let scanDetectionCount = {};
   let lastProcessedTime = 0;
+  let scannerActive = false;
+  let videoStream = null;
+  let usingZXing = true;
   
   // Start the barcode scanner
   function startScanner() {
@@ -640,38 +630,135 @@
     scannerMessage.textContent = 'Starting camera...';
     scannerResult.style.display = 'none';
     manualInput.style.display = 'none';
+    scannerActive = true;
     
     // Reset scan detections
     scanDetectionCount = {};
     
-    // Initialize Quagga
-    initQuagga();
+    // Try ZXing first (more reliable on iOS)
+    tryZXingScanner();
   }
   
-  function initQuagga() {
-    // Config for Ford VIN barcodes (typically Code 39 or Code 128)
+  // Try the ZXing scanner implementation first
+  function tryZXingScanner() {
+    try {
+      if (typeof ZXing !== 'undefined') {
+        usingZXing = true;
+        initZXingScanner();
+      } else {
+        usingZXing = false;
+        initQuaggaScanner();
+      }
+    } catch (error) {
+      console.error("Error initializing ZXing:", error);
+      usingZXing = false;
+      initQuaggaScanner();
+    }
+  }
+  
+  // Initialize ZXing scanner
+  function initZXingScanner() {
+    if (!codeReader) {
+      codeReader = new ZXing.BrowserMultiFormatReader();
+    }
+    
+    // Get video element or create one
+    const videoElement = document.createElement('video');
+    videoElement.id = 'zxing-video';
+    videoElement.style.width = '100%';
+    videoElement.style.height = '100%';
+    videoElement.style.objectFit = 'cover';
+    
+    // Clear old content and add video
+    const interactiveElement = document.getElementById('interactive');
+    interactiveElement.innerHTML = '';
+    interactiveElement.appendChild(videoElement);
+    
+    // Start scanning
+    codeReader.decodeFromConstraints(
+      {
+        video: {
+          facingMode: 'environment',
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 },
+          aspectRatio: { ideal: 1.7778 }
+        }
+      },
+      'zxing-video',
+      (result, error) => {
+        if (result && scannerActive) {
+          // Process valid barcode
+          const code = result.getText().trim().toUpperCase();
+          if (code && VIN_REGEX.test(code)) {
+            // Found a valid VIN code
+            scannerMessage.textContent = `Detected VIN: ${code}`;
+            scannerResult.textContent = `VIN Detected: ${code}`;
+            scannerResult.style.display = 'block';
+            
+            // Stop scanning after successful detection
+            setTimeout(() => {
+              if (scannerActive) {
+                setVinAndClose(code);
+              }
+            }, 800);
+          }
+        }
+        
+        if (error && error !== ZXing.NotFoundException) {
+          console.error("ZXing error:", error);
+          if (scannerActive && usingZXing) {
+            // Fall back to Quagga on error
+            usingZXing = false;
+            codeReader.reset();
+            initQuaggaScanner();
+          }
+        }
+      }
+    ).catch(err => {
+      console.error("Error accessing camera with ZXing:", err);
+      usingZXing = false;
+      initQuaggaScanner();
+    });
+    
+    // Set message
+    scannerMessage.textContent = "Scanning for VIN barcode...";
+  }
+  
+  // Initialize Quagga as fallback
+  function initQuaggaScanner() {
+    // Config for Ford VIN barcodes (usually Code 39 or Code 128)
     Quagga.init({
       inputStream: {
         name: "Live",
         type: "LiveStream",
         target: document.getElementById("interactive"),
         constraints: {
-          width: { min: 640 },
-          height: { min: 480 },
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 },
           facingMode: "environment",
-          aspectRatio: { min: 1, max: 2 }
+          aspectRatio: { ideal: 1.7778 }
         },
+        area: { // Restrict scanning to center 80% of viewfinder
+          top: "10%", 
+          right: "10%", 
+          left: "10%", 
+          bottom: "10%" 
+        }
       },
       locator: {
         patchSize: "medium",
         halfSample: true
       },
-      numOfWorkers: 2,
+      numOfWorkers: navigator.hardwareConcurrency ? 
+                    Math.min(navigator.hardwareConcurrency, 4) : 2,
       frequency: 10,
       decoder: {
         readers: [
           "code_39_reader", // Primary type for VIN barcodes
-          "code_128_reader" // Backup type
+          "code_128_reader", // Secondary type
+          "code_39_vin_reader", // Special reader for VIN Code 39
+          "ean_reader", // For compatibility
+          "upc_reader"  // For compatibility
         ],
         multiple: false
       },
@@ -683,6 +770,19 @@
         return;
       }
       
+      // Get stream for flashlight control
+      try {
+        const track = Quagga.CameraAccess.getActiveTrack();
+        if (track && track.getCapabilities && track.getCapabilities().torch) {
+          scannerTorch.style.display = 'block';
+        } else {
+          scannerTorch.style.display = 'none';
+        }
+      } catch (e) {
+        console.log("Torch not supported", e);
+        scannerTorch.style.display = 'none';
+      }
+      
       // Start scanning
       quaggaState = true;
       Quagga.start();
@@ -690,7 +790,7 @@
       
       // Process detected barcodes
       Quagga.onDetected(function(result) {
-        if (!quaggaState) return;
+        if (!quaggaState || !scannerActive) return;
         
         const code = result.codeResult.code.trim().toUpperCase();
         const confidence = result.codeResult.confidence;
@@ -721,25 +821,24 @@
     scannerMessage.textContent = `Detected: ${code.substring(0, 10)}...`;
     
     // Accept code if:
-    // 1. High confidence (>75) and seen at least once, or
-    // 2. Medium confidence (>60) and seen at least twice, or
+    // 1. High confidence (>70) and seen at least once, or
+    // 2. Medium confidence (>50) and seen at least twice, or
     // 3. Any confidence but seen 3+ times
     const data = scanDetectionCount[code];
     
-    if ((data.confidence > 75) || 
-        (data.confidence > 60 && data.count >= 2) || 
+    if ((data.confidence > 70) || 
+        (data.confidence > 50 && data.count >= 2) || 
         (data.count >= 3)) {
         
       // Success - we have a valid VIN
       scannerResult.textContent = `VIN Detected: ${code}`;
       scannerResult.style.display = 'block';
       
-      // Stop scanning
-      quaggaState = false;
-      
-      // Set the VIN after a short delay for visual feedback
+      // Stop scanning after successful detection
       setTimeout(() => {
-        setVinAndClose(code);
+        if (scannerActive) {
+          setVinAndClose(code);
+        }
       }, 800);
     }
   }
@@ -759,7 +858,18 @@
   }
   
   function stopScanner() {
-    // Stop Quagga
+    scannerActive = false;
+    
+    // Stop ZXing if active
+    if (usingZXing && codeReader) {
+      try {
+        codeReader.reset();
+      } catch (e) {
+        console.error("Error stopping ZXing:", e);
+      }
+    }
+    
+    // Stop Quagga if active
     if (quaggaState) {
       quaggaState = false;
       try {
@@ -772,6 +882,46 @@
     // Reset UI
     document.body.classList.remove('scanning');
     scannerContainer.style.display = 'none';
+  }
+  
+  // Toggle flashlight/torch if available
+  function toggleTorch() {
+    if (usingZXing) {
+      // For ZXing
+      try {
+        const videoElement = document.getElementById('zxing-video');
+        if (videoElement && videoElement.srcObject) {
+          const track = videoElement.srcObject.getVideoTracks()[0];
+          if (track && track.getCapabilities().torch) {
+            const torchState = !track.getConstraints().advanced?.[0]?.torch;
+            track.applyConstraints({
+              advanced: [{ torch: torchState }]
+            });
+            return;
+          }
+        }
+        alert("Flashlight not available");
+      } catch (e) {
+        console.error("Error toggling torch with ZXing:", e);
+        alert("Couldn't access flashlight");
+      }
+    } else {
+      // For Quagga
+      try {
+        const track = Quagga.CameraAccess.getActiveTrack();
+        if (track && track.getCapabilities && track.getCapabilities().torch) {
+          const torchState = !track.getConstraints().advanced?.[0]?.torch;
+          track.applyConstraints({
+            advanced: [{ torch: torchState }]
+          });
+        } else {
+          alert("Flashlight not available");
+        }
+      } catch (e) {
+        console.error("Error toggling torch with Quagga:", e);
+        alert("Couldn't access flashlight");
+      }
+    }
   }
   
   // Manual VIN input functions
@@ -798,12 +948,33 @@
   // Event listeners
   document.getElementById("scanBtn").addEventListener("click", startScanner);
   scannerClose.addEventListener("click", stopScanner);
+  scannerTorch.addEventListener("click", toggleTorch);
   manualButton.addEventListener("click", showManualInput);
   confirmManual.addEventListener("click", confirmManualVin);
   cancelManual.addEventListener("click", hideManualInput);
   
+  // Handle Enter key in manual input
+  manualVin.addEventListener("keyup", function(event) {
+    if (event.key === "Enter") {
+      confirmManualVin();
+    }
+  });
+  
+  // Enter key in login screen
+  document.getElementById("loginPass").addEventListener("keyup", function(event) {
+    if (event.key === "Enter") {
+      checkLogin();
+    }
+  });
+  
   // Cleanup when leaving page
   window.addEventListener('beforeunload', () => {
+    if (usingZXing && codeReader) {
+      try {
+        codeReader.reset();
+      } catch (e) {}
+    }
+    
     if (quaggaState) {
       try {
         Quagga.stop();
