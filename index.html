@@ -490,6 +490,58 @@
       max-width: 150px;
       display: none;
     }
+    
+    /* Error recovery panel */
+    #error-recovery {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      width: 80%;
+      max-width: 300px;
+      z-index: 5;
+      display: none;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    
+    #error-recovery h3 {
+      margin-top: 0;
+      color: var(--ford-blue);
+    }
+    
+    #error-recovery p {
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+    
+    #error-recovery button {
+      margin-top: 10px;
+    }
+    
+    /* Library loading indicator */
+    #library-loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 10px;
+      z-index: 6;
+      display: none;
+      text-align: center;
+    }
+    
+    #library-loading .spinner {
+      width: 30px;
+      height: 30px;
+      margin: 0 auto 10px;
+    }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script>
@@ -616,6 +668,12 @@
     
     <!-- Debug panel for development -->
     <div id="debug-panel"></div>
+    
+    <!-- Library loading indicator -->
+    <div id="library-loading">
+      <div class="spinner"></div>
+      <div>Loading scanner libraries...</div>
+    </div>
   </div>
   <div id="close-scanner">×</div>
   
@@ -628,6 +686,17 @@
       <button id="cancel-manual-vin" class="secondary">Cancel</button>
     </div>
   </div>
+  
+  <!-- Error recovery panel -->
+  <div id="error-recovery">
+    <h3>Scanner Error</h3>
+    <p id="error-message">There was a problem initializing the scanner.</p>
+    <div class="button-group">
+      <button id="retry-scanner">Try Again</button>
+      <button id="fallback-scanner" class="secondary">Use Basic Scanner</button>
+      <button id="manual-entry-fallback">Enter VIN Manually</button>
+    </div>
+  </div>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -635,782 +704,989 @@
   <div class="loading-text">Submitting fuel slip...</div>
 </div>
 
-<!-- Enhanced barcode scanning libraries -->
-<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
-<!-- ZXing library for better barcode detection -->
-<script src="https://unpkg.com/@zxing/library@0.19.1"></script>
-
+<!-- Load libraries with proper error handling -->
 <script>
-  const loginScreen = document.getElementById("loginScreen");
-  const fuelForm = document.getElementById("fuelForm");
-  const confirmationPage = document.getElementById("confirmationPage");
-  const finalConfirmation = document.getElementById("finalConfirmation");
-  const loadingOverlay = document.getElementById("loadingOverlay");
-  const scannerContainer = document.getElementById("scanner-container");
-  const closeScanner = document.getElementById("close-scanner");
-  const scanStatus = document.getElementById("scan-status");
-  const scanRegion = document.getElementById("scan-region");
-  const barcodeResult = document.getElementById("barcode-result");
-  const manualCaptureBtn = document.getElementById("manual-capture");
-  const showManualInputBtn = document.getElementById("show-manual-input");
-  const manualInputContainer = document.getElementById("manual-input-container");
-  const manualVinInput = document.getElementById("manual-vin-input");
-  const confirmManualVin = document.getElementById("confirm-manual-vin");
-  const cancelManualVin = document.getElementById("cancel-manual-vin");
-  const captureCanvas = document.getElementById("capture-canvas");
-  const videoElement = document.getElementById("scanner");
-  const torchButton = document.getElementById("torch-button");
-  const scanModeSelector = document.getElementById("scan-mode-selector");
-  const debugPanel = document.getElementById("debug-panel");
-
-  const vin = document.getElementById("vin");
-  const start = document.getElementById("startGallons");
-  const end = document.getElementById("endGallons");
-  const used = document.getElementById("gallonsUsed");
-  const date = document.getElementById("date");
-  const station = document.getElementById("station");
-  const billTo = document.getElementById("billTo");
-  const initials = document.getElementById("initials");
-
-  const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
-  date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
-
-  const confVin = document.getElementById("conf-vin");
-  const confStart = document.getElementById("conf-start");
-  const confEnd = document.getElementById("conf-end");
-  const confUsed = document.getElementById("conf-used");
-  const confDate = document.getElementById("conf-date");
-  const confStation = document.getElementById("conf-station");
-  const confBillTo = document.getElementById("conf-billTo");
-  const confUser = document.getElementById("conf-user");
-
-  const cVin = document.getElementById("c-vin");
-  const cStart = document.getElementById("c-start");
-  const cEnd = document.getElementById("c-end");
-  const cUsed = document.getElementById("c-used");
-  const cDate = document.getElementById("c-date");
-  const cStation = document.getElementById("c-station");
-  const cBillTo = document.getElementById("c-billTo");
-  const cUser = document.getElementById("c-user");
+  // Global variables to track library loading status
+  window.libraryStatus = {
+    quagga: false,
+    zxing: false
+  };
   
-  // Check if device is iOS
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  
-  // Check if device is Android
-  const isAndroid = /Android/.test(navigator.userAgent);
-
-  // Track last detected barcode to prevent duplicates
-  let lastDetectedCode = '';
-  let scannerActive = false;
-  let torchActive = false;
-  let quaggaInstance = null;
-  let videoTrack = null;
-  let currentScanMode = 'auto';
-  
-  // Ford VIN validation pattern - 17 characters, alphanumeric
-  const fordVinPattern = /^[A-HJ-NPR-Z0-9]{17}$/;
-  
-  // Ford VIN typically starts with specific characters
-  const fordVinPrefixes = ['1FA', '1FB', '1FC', '1FD', '1FM', '1FT', '2FA', '2FB', '2FC', '2FM', '2FT', '3FA', '3FB', '3FC', '3FD', '3FM', '3FT'];
-  
-  // Debug mode flag - set to true to show debug panel
-  const DEBUG_MODE = false;
-
-  if (localStorage.getItem("fuelLogin") === "yes") {
-    loginScreen.classList.remove("visible");
-    fuelForm.classList.add("visible");
+  // Function to dynamically load scripts with error handling
+  function loadScript(url, callback) {
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = url;
+    
+    script.onload = function() {
+      callback(null);
+    };
+    
+    script.onerror = function() {
+      callback(new Error(`Failed to load script: ${url}`));
+    };
+    
+    document.head.appendChild(script);
   }
+  
+  // Load libraries in sequence with proper error handling
+  function loadLibraries() {
+    // Show loading indicator
+    document.getElementById('library-loading').style.display = 'block';
+    
+    // First load Quagga
+    loadScript('https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js', function(err) {
+      if (err) {
+        console.error('Failed to load Quagga:', err);
+        window.libraryStatus.quagga = false;
+      } else {
+        window.libraryStatus.quagga = true;
+        console.log('Quagga loaded successfully');
+      }
+      
+      // Then load ZXing (even if Quagga failed)
+      loadScript('https://unpkg.com/@zxing/library@0.19.1', function(err) {
+        if (err) {
+          console.error('Failed to load ZXing:', err);
+          window.libraryStatus.zxing = false;
+        } else {
+          window.libraryStatus.zxing = true;
+          console.log('ZXing loaded successfully');
+        }
+        
+        // Hide loading indicator
+        document.getElementById('library-loading').style.display = 'none';
+        
+        // Initialize the application
+        initializeApp();
+      });
+    });
+  }
+  
+  // Start loading libraries
+  loadLibraries();
+  
+  // Main application initialization
+  function initializeApp() {
+    // Application code will be moved here after libraries are loaded
+  }
+</script>
 
-  function checkLogin() {
-    const pass = document.getElementById("loginPass").value;
-    if (pass === "midway123") {
-      localStorage.setItem("fuelLogin", "yes");
+<!-- Main application code -->
+<script>
+  function initializeApp() {
+    const loginScreen = document.getElementById("loginScreen");
+    const fuelForm = document.getElementById("fuelForm");
+    const confirmationPage = document.getElementById("confirmationPage");
+    const finalConfirmation = document.getElementById("finalConfirmation");
+    const loadingOverlay = document.getElementById("loadingOverlay");
+    const scannerContainer = document.getElementById("scanner-container");
+    const closeScanner = document.getElementById("close-scanner");
+    const scanStatus = document.getElementById("scan-status");
+    const scanRegion = document.getElementById("scan-region");
+    const barcodeResult = document.getElementById("barcode-result");
+    const manualCaptureBtn = document.getElementById("manual-capture");
+    const showManualInputBtn = document.getElementById("show-manual-input");
+    const manualInputContainer = document.getElementById("manual-input-container");
+    const manualVinInput = document.getElementById("manual-vin-input");
+    const confirmManualVin = document.getElementById("confirm-manual-vin");
+    const cancelManualVin = document.getElementById("cancel-manual-vin");
+    const captureCanvas = document.getElementById("capture-canvas");
+    const videoElement = document.getElementById("scanner");
+    const torchButton = document.getElementById("torch-button");
+    const scanModeSelector = document.getElementById("scan-mode-selector");
+    const debugPanel = document.getElementById("debug-panel");
+    const errorRecovery = document.getElementById("error-recovery");
+    const errorMessage = document.getElementById("error-message");
+    const retryScanner = document.getElementById("retry-scanner");
+    const fallbackScanner = document.getElementById("fallback-scanner");
+    const manualEntryFallback = document.getElementById("manual-entry-fallback");
+
+    const vin = document.getElementById("vin");
+    const start = document.getElementById("startGallons");
+    const end = document.getElementById("endGallons");
+    const used = document.getElementById("gallonsUsed");
+    const date = document.getElementById("date");
+    const station = document.getElementById("station");
+    const billTo = document.getElementById("billTo");
+    const initials = document.getElementById("initials");
+
+    const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
+    date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+
+    const confVin = document.getElementById("conf-vin");
+    const confStart = document.getElementById("conf-start");
+    const confEnd = document.getElementById("conf-end");
+    const confUsed = document.getElementById("conf-used");
+    const confDate = document.getElementById("conf-date");
+    const confStation = document.getElementById("conf-station");
+    const confBillTo = document.getElementById("conf-billTo");
+    const confUser = document.getElementById("conf-user");
+
+    const cVin = document.getElementById("c-vin");
+    const cStart = document.getElementById("c-start");
+    const cEnd = document.getElementById("c-end");
+    const cUsed = document.getElementById("c-used");
+    const cDate = document.getElementById("c-date");
+    const cStation = document.getElementById("c-station");
+    const cBillTo = document.getElementById("c-billTo");
+    const cUser = document.getElementById("c-user");
+    
+    // Check if device is iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    // Check if device is Android
+    const isAndroid = /Android/.test(navigator.userAgent);
+
+    // Track last detected barcode to prevent duplicates
+    let lastDetectedCode = '';
+    let scannerActive = false;
+    let torchActive = false;
+    let quaggaInstance = null;
+    let videoTrack = null;
+    let currentScanMode = 'auto';
+    let useFallbackMode = false;
+    
+    // Ford VIN validation pattern - 17 characters, alphanumeric
+    const fordVinPattern = /^[A-HJ-NPR-Z0-9]{17}$/;
+    
+    // Ford VIN typically starts with specific characters
+    const fordVinPrefixes = ['1FA', '1FB', '1FC', '1FD', '1FM', '1FT', '2FA', '2FB', '2FC', '2FM', '2FT', '3FA', '3FB', '3FC', '3FD', '3FM', '3FT'];
+    
+    // Debug mode flag - set to true to show debug panel
+    const DEBUG_MODE = false;
+
+    if (localStorage.getItem("fuelLogin") === "yes") {
       loginScreen.classList.remove("visible");
       fuelForm.classList.add("visible");
-    } else {
-      alert("Incorrect password.");
     }
-  }
 
-  function calc() {
-    const s = parseFloat(start.value) || 0;
-    const e = parseFloat(end.value) || 0;
-    used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
-  }
-
-  start.addEventListener("input", calc);
-  end.addEventListener("input", calc);
-  
-  // Process VIN input - updated to keep full VIN if provided
-  vin.addEventListener("blur", function() {
-    let vinValue = this.value.trim().toUpperCase();
-    this.value = vinValue;
-    
-    // Validate if it's a Ford VIN
-    if (isFordVin(vinValue)) {
-      this.classList.add('ford-vin-detected');
-    } else {
-      this.classList.remove('ford-vin-detected');
-    }
-  });
-
-  fuelForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    confVin.textContent = vin.value.toUpperCase();
-    confStart.textContent = start.value;
-    confEnd.textContent = end.value;
-    confUsed.textContent = used.value;
-    confDate.textContent = date.value;
-    confStation.textContent = station.value;
-    confBillTo.textContent = billTo.value.toUpperCase();
-    confUser.textContent = initials.value.toUpperCase();
-    fuelForm.classList.remove("visible");
-    confirmationPage.classList.add("visible");
-  });
-
-  document.getElementById("confirmSubmit").addEventListener("click", async () => {
-    // Show loading spinner
-    loadingOverlay.style.display = "flex";
-    
-    const data = new URLSearchParams();
-    data.append("vin", vin.value.trim().toUpperCase());
-    data.append("startGallons", start.value);
-    data.append("endGallons", end.value);
-    data.append("gallonsUsed", used.value);
-    data.append("date", date.value);
-    data.append("station", station.value);
-    data.append("billTo", billTo.value.trim().toUpperCase());
-    data.append("initials", initials.value.trim().toUpperCase());
-
-    try {
-      await fetch("https://script.google.com/macros/s/AKfycbw0H3rElOwvOh-zMC1cOaKzwsE0441x6ABaYqCJhsG8nY0Vj5tI3fYWkcynl2A_IOE/exec", {
-        method: "POST",
-        mode: "no-cors",
-        body: data
-      });
-
-      cVin.textContent = vin.value.toUpperCase();
-      cStart.textContent = start.value;
-      cEnd.textContent = end.value;
-      cUsed.textContent = used.value;
-      cDate.textContent = date.value;
-      cStation.textContent = station.value;
-      cBillTo.textContent = billTo.value.toUpperCase();
-      cUser.textContent = initials.value.toUpperCase();
-
-      confirmationPage.classList.remove("visible");
-      
-      // Send Email via EmailJS
-      try {
-        await emailjs.send("service_jbw2q2o", "template_azb4var", {
-          vin: vin.value.trim().toUpperCase(),
-          startGallons: start.value,
-          endGallons: end.value,
-          gallonsUsed: used.value,
-          date: date.value,
-          station: station.value,
-          billTo: billTo.value.trim().toUpperCase(),
-          initials: initials.value.trim().toUpperCase()
-        });
-      } catch (emailError) {
-        console.error("EmailJS error:", emailError);
-        // Continue even if email fails - data is already saved to sheet
-      }
-      
-      // Hide loading spinner and show confirmation
-      loadingOverlay.style.display = "none";
-      finalConfirmation.classList.add("visible");
-    } catch (error) {
-      console.error("Error submitting form:", error);
-      loadingOverlay.style.display = "none";
-      alert("There was an error submitting the form. Please try again.");
-      confirmationPage.classList.add("visible");
-    }
-  });
-
-  function goBack() {
-    confirmationPage.classList.remove("visible");
-    fuelForm.classList.add("visible");
-  }
-
-  function resetForm() {
-    fuelForm.reset();
-    date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
-    finalConfirmation.classList.remove("visible");
-    fuelForm.classList.add("visible");
-  }
-
-  // ENHANCED BARCODE SCANNING APPROACH
-  let videoStream;
-  let scanning = false;
-  
-  // Initialize ZXing reader for better barcode detection
-  const codeReader = new ZXing.BrowserMultiFormatReader();
-
-  document.getElementById("scanBtn").addEventListener("click", startScanner);
-  closeScanner.addEventListener("click", stopScanner);
-  manualCaptureBtn.addEventListener("click", captureBarcode);
-  showManualInputBtn.addEventListener("click", showManualInput);
-  confirmManualVin.addEventListener("click", confirmManualVinCode);
-  cancelManualVin.addEventListener("click", hideManualInput);
-  torchButton.addEventListener("click", toggleTorch);
-  
-  // Set up scan mode selector
-  scanModeSelector.querySelectorAll('button').forEach(button => {
-    button.addEventListener('click', function() {
-      // Update active button
-      scanModeSelector.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
-      this.classList.add('active');
-      
-      // Set current scan mode
-      currentScanMode = this.dataset.mode;
-      
-      // Restart scanner with new mode if active
-      if (scannerActive) {
-        stopQuaggaScanner();
-        startQuaggaScanner();
-      }
-      
-      logDebug(`Scan mode changed to: ${currentScanMode}`);
-    });
-  });
-
-  // Show manual input dialog
-  function showManualInput() {
-    manualInputContainer.style.display = "block";
-    manualVinInput.focus();
-  }
-  
-  // Hide manual input dialog
-  function hideManualInput() {
-    manualInputContainer.style.display = "none";
-    manualVinInput.value = "";
-  }
-  
-  // Process manually entered VIN
-  function confirmManualVinCode() {
-    const manualVinCode = manualVinInput.value.trim().toUpperCase();
-    if (manualVinCode.length >= 8) {
-      hideManualInput();
-      setVinResult(manualVinCode);
-      stopScanner();
-    } else {
-      alert("Please enter at least 8 characters of the VIN");
-    }
-  }
-
-  // Fixed portrait mode setup
-  function setupPortraitScanner() {
-    document.body.classList.add('scanning');
-    scannerContainer.style.display = 'block';
-    
-    // Cancel any previous orientation lock request
-    if (screen.orientation && screen.orientation.unlock) {
-      screen.orientation.unlock();
-    }
-    
-    manualCaptureBtn.style.display = 'block';
-    showManualInputBtn.style.display = 'block';
-    manualInputContainer.style.display = 'none';
-    lastDetectedCode = '';
-    
-    // Show debug panel if in debug mode
-    debugPanel.style.display = DEBUG_MODE ? 'block' : 'none';
-  }
-  
-  function cleanupScanner() {
-    document.body.classList.remove('scanning');
-    scannerContainer.style.display = 'none';
-    manualInputContainer.style.display = 'none';
-    scanRegion.classList.remove('scanning');
-    
-    // Stop Quagga if running
-    stopQuaggaScanner();
-  }
-  
-  function stopQuaggaScanner() {
-    if (quaggaInstance && scannerActive) {
-      try {
-        Quagga.offDetected(handleBarcodeDetection);
-        Quagga.stop();
-        scannerActive = false;
-      } catch (e) {
-        console.log("Error stopping Quagga:", e);
-      }
-    }
-  }
-
-  async function startScanner() {
-    setupPortraitScanner();
-    scanRegion.classList.add('scanning');
-    scanStatus.textContent = 'Starting camera...';
-    barcodeResult.textContent = '';
-    
-    try {
-      // Use higher resolution for better barcode detection
-      // Different settings for iOS vs Android for optimal performance
-      const constraints = {
-        audio: false,
-        video: {
-          facingMode: 'environment',
-          width: isIOS ? { min: 1280, ideal: 1920 } : { ideal: 1280 },
-          height: isIOS ? { min: 720, ideal: 1080 } : { ideal: 720 },
-          // iOS performs better with specific aspect ratio
-          aspectRatio: isIOS ? { exact: 1.777778 } : { ideal: 1.777778 }
-        }
-      };
-      
-      // Add platform-specific optimizations
-      if (isIOS) {
-        // iOS-specific camera settings
-        constraints.video.zoom = 2.0; // Digital zoom for iOS (if supported)
-      } else if (isAndroid) {
-        // Android-specific camera settings
-        constraints.video.focusMode = 'continuous'; // Continuous autofocus
-      }
-      
-      logDebug(`Starting camera with constraints: ${JSON.stringify(constraints.video)}`);
-      
-      videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-      videoElement.srcObject = videoStream;
-      
-      // Get video track for torch control later
-      videoTrack = videoStream.getVideoTracks()[0];
-      
-      // Show/hide torch button based on capability
-      const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-      torchButton.style.display = capabilities.torch ? 'flex' : 'none';
-      
-      // Log camera capabilities for debugging
-      if (DEBUG_MODE && capabilities) {
-        logDebug(`Camera capabilities: ${JSON.stringify(capabilities)}`);
-      }
-      
-      // Wait for video to be ready
-      await new Promise(resolve => {
-        videoElement.onloadedmetadata = () => {
-          videoElement.play().then(resolve);
-        };
-      });
-      
-      scanStatus.textContent = 'Scanning for Ford VIN barcode...';
-      
-      // Start automatic barcode detection
-      startQuaggaScanner();
-      
-    } catch (err) {
-      console.error('Error accessing camera:', err);
-      scanStatus.textContent = 'Camera access failed';
-      logDebug(`Camera error: ${err.message}`);
-    }
-  }
-  
-  // Toggle device torch/flashlight
-  async function toggleTorch() {
-    if (!videoTrack) return;
-    
-    try {
-      // Check if torch is supported
-      if (videoTrack.getCapabilities && videoTrack.getCapabilities().torch) {
-        torchActive = !torchActive;
-        await videoTrack.applyConstraints({
-          advanced: [{ torch: torchActive }]
-        });
-        torchButton.innerHTML = torchActive ? 
-          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M5 14.5V12H4V14.5H2V16H4V18.5H5V16H7V14.5H5ZM10 3V7L12.88 12.88C13.5 13.5 13.5 14.5 12.88 15.12C12.26 15.74 11.26 15.74 10.64 15.12C10.02 14.5 10.02 13.5 10.64 12.88L8 8V3H10ZM12 3H16V5H12V3Z"/>
-           </svg> Turn Flash Off` : 
-          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M5 14.5V12H4V14.5H2V16H4V18.5H5V16H7V14.5H5ZM10 3V7L12.88 12.88C13.5 13.5 13.5 14.5 12.88 15.12C12.26 15.74 11.26 15.74 10.64 15.12C10.02 14.5 10.02 13.5 10.64 12.88L8 8V3H10ZM12 3H16V5H12V3Z"/>
-           </svg> Turn Flash On`;
+    function checkLogin() {
+      const pass = document.getElementById("loginPass").value;
+      if (pass === "midway123") {
+        localStorage.setItem("fuelLogin", "yes");
+        loginScreen.classList.remove("visible");
+        fuelForm.classList.add("visible");
       } else {
-        scanStatus.textContent = "Flash not supported on this device";
-        setTimeout(() => {
-          scanStatus.textContent = "Scanning for Ford VIN barcode...";
-        }, 2000);
+        alert("Incorrect password.");
       }
-    } catch (err) {
-      console.error('Error toggling torch:', err);
-      logDebug(`Torch error: ${err.message}`);
     }
-  }
-  
-  // Start continuous barcode scanning with Quagga
-  function startQuaggaScanner() {
-    if (!videoStream) return;
+
+    function calc() {
+      const s = parseFloat(start.value) || 0;
+      const e = parseFloat(end.value) || 0;
+      used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
+    }
+
+    start.addEventListener("input", calc);
+    end.addEventListener("input", calc);
     
-    // Configure readers based on scan mode
-    let readers = [];
+    // Process VIN input - updated to keep full VIN if provided
+    vin.addEventListener("blur", function() {
+      let vinValue = this.value.trim().toUpperCase();
+      this.value = vinValue;
+      
+      // Validate if it's a Ford VIN
+      if (isFordVin(vinValue)) {
+        this.classList.add('ford-vin-detected');
+      } else {
+        this.classList.remove('ford-vin-detected');
+      }
+    });
+
+    fuelForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      confVin.textContent = vin.value.toUpperCase();
+      confStart.textContent = start.value;
+      confEnd.textContent = end.value;
+      confUsed.textContent = used.value;
+      confDate.textContent = date.value;
+      confStation.textContent = station.value;
+      confBillTo.textContent = billTo.value.toUpperCase();
+      confUser.textContent = initials.value.toUpperCase();
+      fuelForm.classList.remove("visible");
+      confirmationPage.classList.add("visible");
+    });
+
+    document.getElementById("confirmSubmit").addEventListener("click", async () => {
+      // Show loading spinner
+      loadingOverlay.style.display = "flex";
+      
+      const data = new URLSearchParams();
+      data.append("vin", vin.value.trim().toUpperCase());
+      data.append("startGallons", start.value);
+      data.append("endGallons", end.value);
+      data.append("gallonsUsed", used.value);
+      data.append("date", date.value);
+      data.append("station", station.value);
+      data.append("billTo", billTo.value.trim().toUpperCase());
+      data.append("initials", initials.value.trim().toUpperCase());
+
+      try {
+        await fetch("https://script.google.com/macros/s/AKfycbw0H3rElOwvOh-zMC1cOaKzwsE0441x6ABaYqCJhsG8nY0Vj5tI3fYWkcynl2A_IOE/exec", {
+          method: "POST",
+          mode: "no-cors",
+          body: data
+        });
+
+        cVin.textContent = vin.value.toUpperCase();
+        cStart.textContent = start.value;
+        cEnd.textContent = end.value;
+        cUsed.textContent = used.value;
+        cDate.textContent = date.value;
+        cStation.textContent = station.value;
+        cBillTo.textContent = billTo.value.toUpperCase();
+        cUser.textContent = initials.value.toUpperCase();
+
+        confirmationPage.classList.remove("visible");
+        
+        // Send Email via EmailJS
+        try {
+          await emailjs.send("service_jbw2q2o", "template_azb4var", {
+            vin: vin.value.trim().toUpperCase(),
+            startGallons: start.value,
+            endGallons: end.value,
+            gallonsUsed: used.value,
+            date: date.value,
+            station: station.value,
+            billTo: billTo.value.trim().toUpperCase(),
+            initials: initials.value.trim().toUpperCase()
+          });
+        } catch (emailError) {
+          console.error("EmailJS error:", emailError);
+          // Continue even if email fails - data is already saved to sheet
+        }
+        
+        // Hide loading spinner and show confirmation
+        loadingOverlay.style.display = "none";
+        finalConfirmation.classList.add("visible");
+      } catch (error) {
+        console.error("Error submitting form:", error);
+        loadingOverlay.style.display = "none";
+        alert("There was an error submitting the form. Please try again.");
+        confirmationPage.classList.add("visible");
+      }
+    });
+
+    function goBack() {
+      confirmationPage.classList.remove("visible");
+      fuelForm.classList.add("visible");
+    }
+
+    function resetForm() {
+      fuelForm.reset();
+      date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+      finalConfirmation.classList.remove("visible");
+      fuelForm.classList.add("visible");
+    }
+
+    // ENHANCED BARCODE SCANNING APPROACH
+    let videoStream;
+    let scanning = false;
     
-    switch(currentScanMode) {
-      case 'code39':
-        readers = [{ format: "code_39_reader", config: { supplements: [] } }];
-        break;
-      case 'code128':
-        readers = [{ format: "code_128_reader", config: { supplements: [] } }];
-        break;
-      case 'data_matrix':
-        readers = [{ format: "data_matrix_reader" }];
-        break;
-      case 'auto':
-      default:
-        // Ford VINs are typically Code 39 or Code 128, but we'll check all common formats
-        readers = [
-          { format: "code_39_reader", config: { supplements: [] } },
-          { format: "code_128_reader", config: { supplements: [] } },
-          { format: "data_matrix_reader" },
-          { format: "ean_reader", config: { supplements: [] } }
-        ];
+    // Initialize ZXing reader for better barcode detection
+    let codeReader = null;
+    
+    // Only initialize ZXing if the library loaded successfully
+    if (window.libraryStatus.zxing && typeof ZXing !== 'undefined') {
+      try {
+        codeReader = new ZXing.BrowserMultiFormatReader();
+        logDebug("ZXing reader initialized successfully");
+      } catch (e) {
+        console.error("Failed to initialize ZXing reader:", e);
+        logDebug("ZXing initialization error: " + e.message);
+      }
+    }
+
+    document.getElementById("scanBtn").addEventListener("click", startScanner);
+    closeScanner.addEventListener("click", stopScanner);
+    manualCaptureBtn.addEventListener("click", captureBarcode);
+    showManualInputBtn.addEventListener("click", showManualInput);
+    confirmManualVin.addEventListener("click", confirmManualVinCode);
+    cancelManualVin.addEventListener("click", hideManualInput);
+    torchButton.addEventListener("click", toggleTorch);
+    retryScanner.addEventListener("click", retryInitialization);
+    fallbackScanner.addEventListener("click", useFallbackScanner);
+    manualEntryFallback.addEventListener("click", showManualInput);
+    
+    // Set up scan mode selector
+    scanModeSelector.querySelectorAll('button').forEach(button => {
+      button.addEventListener('click', function() {
+        // Update active button
+        scanModeSelector.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+        this.classList.add('active');
+        
+        // Set current scan mode
+        currentScanMode = this.dataset.mode;
+        
+        // Restart scanner with new mode if active
+        if (scannerActive) {
+          stopQuaggaScanner();
+          startQuaggaScanner();
+        }
+        
+        logDebug(`Scan mode changed to: ${currentScanMode}`);
+      });
+    });
+
+    // Show manual input dialog
+    function showManualInput() {
+      errorRecovery.style.display = 'none';
+      manualInputContainer.style.display = "block";
+      manualVinInput.focus();
     }
     
-    // Initialize Quagga with optimized settings for VIN codes
-    Quagga.init({
-      inputStream: {
-        name: "Live",
-        type: "LiveStream",
-        target: videoElement,
-        constraints: {
-          width: window.innerWidth,
-          height: window.innerHeight,
-          facingMode: "environment"
-        },
-      },
-      locator: {
-        patchSize: "medium",
-        halfSample: true
-      },
-      numOfWorkers: navigator.hardwareConcurrency || 4,
-      frequency: 10,
-      decoder: {
-        readers: readers,
-        multiple: false
-      },
-      locate: true
-    }, function(err) {
-      if (err) {
-        console.error("Quagga initialization failed:", err);
-        scanStatus.textContent = "Scanner initialization failed";
-        logDebug(`Quagga error: ${err.message}`);
+    // Hide manual input dialog
+    function hideManualInput() {
+      manualInputContainer.style.display = "none";
+      manualVinInput.value = "";
+    }
+    
+    // Process manually entered VIN
+    function confirmManualVinCode() {
+      const manualVinCode = manualVinInput.value.trim().toUpperCase();
+      if (manualVinCode.length >= 8) {
+        hideManualInput();
+        setVinResult(manualVinCode);
+        stopScanner();
+      } else {
+        alert("Please enter at least 8 characters of the VIN");
+      }
+    }
+
+    // Fixed portrait mode setup
+    function setupPortraitScanner() {
+      document.body.classList.add('scanning');
+      scannerContainer.style.display = 'block';
+      
+      // Cancel any previous orientation lock request
+      if (screen.orientation && screen.orientation.unlock) {
+        screen.orientation.unlock();
+      }
+      
+      manualCaptureBtn.style.display = 'block';
+      showManualInputBtn.style.display = 'block';
+      manualInputContainer.style.display = 'none';
+      errorRecovery.style.display = 'none';
+      lastDetectedCode = '';
+      
+      // Show debug panel if in debug mode
+      debugPanel.style.display = DEBUG_MODE ? 'block' : 'none';
+    }
+    
+    function cleanupScanner() {
+      document.body.classList.remove('scanning');
+      scannerContainer.style.display = 'none';
+      manualInputContainer.style.display = 'none';
+      errorRecovery.style.display = 'none';
+      scanRegion.classList.remove('scanning');
+      
+      // Stop Quagga if running
+      stopQuaggaScanner();
+      
+      // Reset fallback mode
+      useFallbackMode = false;
+    }
+    
+    function stopQuaggaScanner() {
+      if (quaggaInstance && scannerActive) {
+        try {
+          Quagga.offDetected(handleBarcodeDetection);
+          Quagga.stop();
+          scannerActive = false;
+        } catch (e) {
+          console.log("Error stopping Quagga:", e);
+        }
+      }
+    }
+    
+    // Retry scanner initialization after error
+    function retryInitialization() {
+      errorRecovery.style.display = 'none';
+      startScanner();
+    }
+    
+    // Use fallback scanner mode with simpler settings
+    function useFallbackScanner() {
+      useFallbackMode = true;
+      errorRecovery.style.display = 'none';
+      startFallbackScanner();
+    }
+
+    async function startScanner() {
+      // Check if libraries are loaded
+      if (!checkLibraries()) {
         return;
       }
       
-      scannerActive = true;
+      setupPortraitScanner();
+      scanRegion.classList.add('scanning');
+      scanStatus.textContent = 'Starting camera...';
+      barcodeResult.textContent = '';
       
-      // Start scanning
-      Quagga.start();
-      
-      // Listen for barcode detection
-      Quagga.onDetected(handleBarcodeDetection);
-      
-      // Update status
-      scanStatus.textContent = "Scanning for Ford VIN barcode...";
-      logDebug(`Quagga started with readers: ${readers.map(r => r.format).join(', ')}`);
-    });
-    
-    quaggaInstance = Quagga;
-  }
-  
-  // Handle barcode detection result
-  function handleBarcodeDetection(result) {
-    if (!result || !result.codeResult || !result.codeResult.code) return;
-    
-    const code = result.codeResult.code.trim().toUpperCase();
-    
-    // Avoid re-processing the same barcode
-    if (code === lastDetectedCode) return;
-    
-    // Log detection for debugging
-    logDebug(`Detected code: ${code} (Format: ${result.codeResult.format})`);
-    
-    // Process the detected code
-    processDetectedCode(code, result.codeResult.format);
-  }
-  
-  // Process and validate detected barcode
-  function processDetectedCode(code, format) {
-    // Show detected code
-    barcodeResult.textContent = code;
-    lastDetectedCode = code;
-    
-    // Check if it's a valid VIN format (alphanumeric, proper length)
-    if (!/^[A-Z0-9]+$/.test(code)) {
-      scanStatus.textContent = "Invalid characters in barcode";
-      return;
-    }
-    
-    // Ford VINs are 17 characters, but sometimes only partial VINs are scanned
-    // or sometimes extra characters are included
-    
-    // Try to extract a valid VIN from the scanned code
-    let extractedVin = extractVin(code);
-    
-    if (extractedVin) {
-      // Visual feedback
-      scanRegion.classList.add('success-scan');
-      scanStatus.textContent = "Ford VIN detected!";
-      
-      // Slight delay before closing to show success
-      setTimeout(() => {
-        scanRegion.classList.remove('success-scan');
-        setVinResult(extractedVin);
-        stopScanner();
-      }, 800);
-    } else if (code.length >= 8) {
-      // If we can't confirm it's a Ford VIN but it's at least 8 chars, accept it
-      scanStatus.textContent = "Possible VIN detected";
-      
-      // Visual feedback
-      scanRegion.classList.add('success-scan');
-      
-      setTimeout(() => {
-        scanRegion.classList.remove('success-scan');
-        setVinResult(code);
-        stopScanner();
-      }, 800);
-    } else {
-      // Too short to be useful
-      scanStatus.textContent = "Detected code too short, still scanning...";
-    }
-  }
-  
-  // Extract a valid VIN from a potentially longer or shorter string
-  function extractVin(code) {
-    // If it's exactly 17 characters and matches the pattern, it's likely a VIN
-    if (code.length === 17 && fordVinPattern.test(code)) {
-      return code;
-    }
-    
-    // If it's longer than 17 characters, try to find a valid VIN within it
-    if (code.length > 17) {
-      // Check for Ford VIN prefixes
-      for (const prefix of fordVinPrefixes) {
-        const startIndex = code.indexOf(prefix);
-        if (startIndex >= 0 && startIndex + 17 <= code.length) {
-          const possibleVin = code.substring(startIndex, startIndex + 17);
-          if (fordVinPattern.test(possibleVin)) {
-            return possibleVin;
-          }
-        }
-      }
-      
-      // If no prefix found, just take the first 17 characters if they match the pattern
-      const possibleVin = code.substring(0, 17);
-      if (fordVinPattern.test(possibleVin)) {
-        return possibleVin;
-      }
-    }
-    
-    // If it's shorter than 17 but at least 8 characters, it might be a partial VIN
-    if (code.length >= 8 && code.length < 17) {
-      // Check if it matches the end of a Ford VIN pattern (last 8+ characters)
-      if (/^[A-HJ-NPR-Z0-9]+$/.test(code)) {
-        return code; // Return the partial VIN
-      }
-    }
-    
-    return null; // No valid VIN found
-  }
-  
-  // Check if a string is likely a Ford VIN
-  function isFordVin(vin) {
-    // Must be 17 characters and match the pattern
-    if (vin.length !== 17 || !fordVinPattern.test(vin)) {
-      return false;
-    }
-    
-    // Check for Ford manufacturer prefix
-    for (const prefix of fordVinPrefixes) {
-      if (vin.startsWith(prefix)) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
-
-  // Manual photo capture for barcode detection
-  function captureBarcode() {
-    if (!videoStream) {
-      scanStatus.textContent = 'Camera not available';
-      return;
-    }
-    
-    try {
-      scanStatus.textContent = 'Processing...';
-      
-      const context = captureCanvas.getContext('2d');
-      const videoWidth = videoElement.videoWidth;
-      const videoHeight = videoElement.videoHeight;
-      
-      // Ensure canvas is correctly sized
-      captureCanvas.width = videoWidth;
-      captureCanvas.height = videoHeight;
-      
-      // Draw the current video frame to the canvas
-      context.drawImage(videoElement, 0, 0, videoWidth, videoHeight);
-      
-      // Get the image data URL
-      const imageDataUrl = captureCanvas.toDataURL('image/jpeg', 0.9);
-      
-      // Try ZXing first for better accuracy
       try {
-        // Create an Image object to load the data URL
-        const img = new Image();
-        img.crossOrigin = "anonymous"; // Avoid CORS issues
-        
-        img.onload = function() {
-          try {
-            // Use ZXing to decode the image
-            const hints = new Map();
-            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-              ZXing.BarcodeFormat.CODE_39,
-              ZXing.BarcodeFormat.CODE_128,
-              ZXing.BarcodeFormat.DATA_MATRIX,
-              ZXing.BarcodeFormat.EAN_13
-            ]);
-            
-            codeReader.decodeFromImage(undefined, imageDataUrl)
-              .then(result => {
-                if (result && result.text) {
-                  const code = result.text.trim().toUpperCase();
-                  logDebug(`ZXing decoded: ${code} (Format: ${result.format})`);
-                  processDetectedCode(code, result.format);
-                } else {
-                  // Fall back to Quagga if ZXing fails
-                  decodeWithQuagga(imageDataUrl);
-                }
-              })
-              .catch(err => {
-                logDebug(`ZXing error: ${err.message}`);
-                // Fall back to Quagga
-                decodeWithQuagga(imageDataUrl);
-              });
-          } catch (e) {
-            logDebug(`ZXing processing error: ${e.message}`);
-            decodeWithQuagga(imageDataUrl);
+        // Use more flexible camera constraints to avoid initialization failures
+        // Different settings for iOS vs Android for optimal performance
+        const constraints = {
+          audio: false,
+          video: {
+            facingMode: 'environment'
           }
         };
         
-        img.src = imageDataUrl;
-      } catch (e) {
-        logDebug(`ZXing setup error: ${e.message}`);
-        decodeWithQuagga(imageDataUrl);
+        // Add optional constraints that won't cause failures if unsupported
+        if (isIOS) {
+          // iOS-specific camera settings - less strict
+          constraints.video.width = { ideal: 1280 };
+          constraints.video.height = { ideal: 720 };
+        } else if (isAndroid) {
+          // Android-specific camera settings - less strict
+          constraints.video.width = { ideal: 1280 };
+          constraints.video.height = { ideal: 720 };
+        }
+        
+        logDebug(`Starting camera with constraints: ${JSON.stringify(constraints.video)}`);
+        
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoElement.srcObject = videoStream;
+        
+        // Get video track for torch control later
+        videoTrack = videoStream.getVideoTracks()[0];
+        
+        // Show/hide torch button based on capability
+        const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        torchButton.style.display = capabilities.torch ? 'flex' : 'none';
+        
+        // Log camera capabilities for debugging
+        if (DEBUG_MODE && capabilities) {
+          logDebug(`Camera capabilities: ${JSON.stringify(capabilities)}`);
+        }
+        
+        // Wait for video to be ready
+        await new Promise(resolve => {
+          videoElement.onloadedmetadata = () => {
+            videoElement.play().then(resolve).catch(err => {
+              console.error("Error playing video:", err);
+              resolve(); // Resolve anyway to continue
+            });
+          };
+          
+          // Add timeout in case onloadedmetadata never fires
+          setTimeout(resolve, 2000);
+        });
+        
+        scanStatus.textContent = 'Scanning for Ford VIN barcode...';
+        
+        // Start automatic barcode detection
+        startQuaggaScanner();
+        
+      } catch (err) {
+        console.error('Error accessing camera:', err);
+        scanStatus.textContent = 'Camera access failed';
+        logDebug(`Camera error: ${err.message}`);
+        
+        // Show error recovery options
+        showScannerError("Camera access failed. Please check camera permissions and try again.");
       }
-    } catch (e) {
-      console.error('Capture error:', e);
-      scanStatus.textContent = 'Error processing image';
-      logDebug(`Capture error: ${e.message}`);
     }
-  }
-  
-  // Fallback to Quagga for image decoding
-  function decodeWithQuagga(imageDataUrl) {
-    // Use Quagga to decode the barcode in the still image
-    Quagga.decodeSingle({
-      decoder: {
-        readers: [
-          { format: "code_39_reader", config: { supplements: [] } },
-          { format: "code_128_reader", config: { supplements: [] } },
-          { format: "data_matrix_reader" },
-          { format: "ean_reader", config: { supplements: [] } }
-        ]
-      },
-      locate: true,
-      src: imageDataUrl
-    }, function(result) {
-      if (result && result.codeResult) {
-        const code = result.codeResult.code.trim().toUpperCase();
-        logDebug(`Quagga decoded: ${code} (Format: ${result.codeResult.format})`);
-        processDetectedCode(code, result.codeResult.format);
+    
+    // Fallback scanner with minimal settings
+    async function startFallbackScanner() {
+      setupPortraitScanner();
+      scanRegion.classList.add('scanning');
+      scanStatus.textContent = 'Starting basic camera...';
+      barcodeResult.textContent = '';
+      
+      try {
+        // Minimal constraints for maximum compatibility
+        const constraints = {
+          audio: false,
+          video: { facingMode: 'environment' }
+        };
+        
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoElement.srcObject = videoStream;
+        
+        // Get video track for torch control
+        videoTrack = videoStream.getVideoTracks()[0];
+        
+        // Wait for video to be ready
+        await new Promise(resolve => {
+          videoElement.onloadedmetadata = () => {
+            videoElement.play().then(resolve).catch(err => {
+              console.error("Error playing video:", err);
+              resolve(); // Resolve anyway to continue
+            });
+          };
+          
+          // Add timeout in case onloadedmetadata never fires
+          setTimeout(resolve, 2000);
+        });
+        
+        scanStatus.textContent = 'Basic scanner active. Use "Take Photo" button.';
+        
+        // Don't start Quagga in fallback mode - rely on manual capture
+        
+      } catch (err) {
+        console.error('Error accessing camera in fallback mode:', err);
+        scanStatus.textContent = 'Camera access failed';
+        
+        // Show manual input as last resort
+        showScannerError("Camera access failed. Please enter VIN manually.");
+      }
+    }
+    
+    // Show scanner error with recovery options
+    function showScannerError(message) {
+      errorMessage.textContent = message;
+      errorRecovery.style.display = 'block';
+    }
+    
+    // Check if required libraries are loaded
+    function checkLibraries() {
+      if (!window.libraryStatus.quagga && !window.libraryStatus.zxing) {
+        showScannerError("Scanner libraries failed to load. Please refresh the page and try again.");
+        return false;
+      }
+      
+      return true;
+    }
+    
+    // Toggle device torch/flashlight
+    async function toggleTorch() {
+      if (!videoTrack) return;
+      
+      try {
+        // Check if torch is supported
+        if (videoTrack.getCapabilities && videoTrack.getCapabilities().torch) {
+          torchActive = !torchActive;
+          await videoTrack.applyConstraints({
+            advanced: [{ torch: torchActive }]
+          });
+          torchButton.innerHTML = torchActive ? 
+            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <path d="M5 14.5V12H4V14.5H2V16H4V18.5H5V16H7V14.5H5ZM10 3V7L12.88 12.88C13.5 13.5 13.5 14.5 12.88 15.12C12.26 15.74 11.26 15.74 10.64 15.12C10.02 14.5 10.02 13.5 10.64 12.88L8 8V3H10ZM12 3H16V5H12V3Z"/>
+             </svg> Turn Flash Off` : 
+            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <path d="M5 14.5V12H4V14.5H2V16H4V18.5H5V16H7V14.5H5ZM10 3V7L12.88 12.88C13.5 13.5 13.5 14.5 12.88 15.12C12.26 15.74 11.26 15.74 10.64 15.12C10.02 14.5 10.02 13.5 10.64 12.88L8 8V3H10ZM12 3H16V5H12V3Z"/>
+             </svg> Turn Flash On`;
+        } else {
+          scanStatus.textContent = "Flash not supported on this device";
+          setTimeout(() => {
+            scanStatus.textContent = "Scanning for Ford VIN barcode...";
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('Error toggling torch:', err);
+        logDebug(`Torch error: ${err.message}`);
+      }
+    }
+    
+    // Start continuous barcode scanning with Quagga
+    function startQuaggaScanner() {
+      if (!videoStream || !window.libraryStatus.quagga) {
+        if (!useFallbackMode) {
+          showScannerError("Barcode scanner initialization failed. Try basic scanner instead.");
+        }
+        return;
+      }
+      
+      // Configure readers based on scan mode
+      let readers = [];
+      
+      switch(currentScanMode) {
+        case 'code39':
+          readers = [{ format: "code_39_reader", config: { supplements: [] } }];
+          break;
+        case 'code128':
+          readers = [{ format: "code_128_reader", config: { supplements: [] } }];
+          break;
+        case 'data_matrix':
+          readers = [{ format: "data_matrix_reader" }];
+          break;
+        case 'auto':
+        default:
+          // Ford VINs are typically Code 39 or Code 128, but we'll check all common formats
+          readers = [
+            { format: "code_39_reader", config: { supplements: [] } },
+            { format: "code_128_reader", config: { supplements: [] } }
+          ];
+      }
+      
+      try {
+        // Initialize Quagga with optimized settings for VIN codes
+        Quagga.init({
+          inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target: videoElement,
+            constraints: {
+              width: window.innerWidth,
+              height: window.innerHeight,
+              facingMode: "environment"
+            },
+          },
+          locator: {
+            patchSize: "medium",
+            halfSample: true
+          },
+          numOfWorkers: 2, // Reduced for better compatibility
+          frequency: 10,
+          decoder: {
+            readers: readers,
+            multiple: false
+          },
+          locate: true
+        }, function(err) {
+          if (err) {
+            console.error("Quagga initialization failed:", err);
+            scanStatus.textContent = "Scanner initialization failed";
+            logDebug(`Quagga error: ${err.message}`);
+            
+            // Show error recovery options
+            showScannerError("Barcode scanner initialization failed. Try basic scanner or enter VIN manually.");
+            return;
+          }
+          
+          scannerActive = true;
+          
+          // Start scanning
+          Quagga.start();
+          
+          // Listen for barcode detection
+          Quagga.onDetected(handleBarcodeDetection);
+          
+          // Update status
+          scanStatus.textContent = "Scanning for Ford VIN barcode...";
+          logDebug(`Quagga started with readers: ${readers.map(r => r.format).join(', ')}`);
+        });
+        
+        quaggaInstance = Quagga;
+      } catch (e) {
+        console.error("Error initializing Quagga:", e);
+        logDebug(`Quagga initialization error: ${e.message}`);
+        
+        // Show error recovery options
+        showScannerError("Barcode scanner initialization failed. Try basic scanner or enter VIN manually.");
+      }
+    }
+    
+    // Handle barcode detection result
+    function handleBarcodeDetection(result) {
+      if (!result || !result.codeResult || !result.codeResult.code) return;
+      
+      const code = result.codeResult.code.trim().toUpperCase();
+      
+      // Avoid re-processing the same barcode
+      if (code === lastDetectedCode) return;
+      
+      // Log detection for debugging
+      logDebug(`Detected code: ${code} (Format: ${result.codeResult.format})`);
+      
+      // Process the detected code
+      processDetectedCode(code, result.codeResult.format);
+    }
+    
+    // Process and validate detected barcode
+    function processDetectedCode(code, format) {
+      // Show detected code
+      barcodeResult.textContent = code;
+      lastDetectedCode = code;
+      
+      // Check if it's a valid VIN format (alphanumeric, proper length)
+      if (!/^[A-Z0-9]+$/.test(code)) {
+        scanStatus.textContent = "Invalid characters in barcode";
+        return;
+      }
+      
+      // Ford VINs are 17 characters, but sometimes only partial VINs are scanned
+      // or sometimes extra characters are included
+      
+      // Try to extract a valid VIN from the scanned code
+      let extractedVin = extractVin(code);
+      
+      if (extractedVin) {
+        // Visual feedback
+        scanRegion.classList.add('success-scan');
+        scanStatus.textContent = "Ford VIN detected!";
+        
+        // Slight delay before closing to show success
+        setTimeout(() => {
+          scanRegion.classList.remove('success-scan');
+          setVinResult(extractedVin);
+          stopScanner();
+        }, 800);
+      } else if (code.length >= 8) {
+        // If we can't confirm it's a Ford VIN but it's at least 8 chars, accept it
+        scanStatus.textContent = "Possible VIN detected";
+        
+        // Visual feedback
+        scanRegion.classList.add('success-scan');
+        
+        setTimeout(() => {
+          scanRegion.classList.remove('success-scan');
+          setVinResult(code);
+          stopScanner();
+        }, 800);
       } else {
-        scanStatus.textContent = 'No barcode found. Try again or enter manually';
+        // Too short to be useful
+        scanStatus.textContent = "Detected code too short, still scanning...";
+      }
+    }
+    
+    // Extract a valid VIN from a potentially longer or shorter string
+    function extractVin(code) {
+      // If it's exactly 17 characters and matches the pattern
+      if (code.length === 17 && fordVinPattern.test(code)) {
+        return code;
+      }
+      
+      // If it's longer than 17 characters, try to find a valid VIN within it
+      if (code.length > 17) {
+        // Check for Ford VIN prefixes
+        for (const prefix of fordVinPrefixes) {
+          const startIndex = code.indexOf(prefix);
+          if (startIndex >= 0 && startIndex + 17 <= code.length) {
+            const possibleVin = code.substring(startIndex, startIndex + 17);
+            if (fordVinPattern.test(possibleVin)) {
+              return possibleVin;
+            }
+          }
+        }
+        
+        // If no prefix found, just take the first 17 characters if they match the pattern
+        const possibleVin = code.substring(0, 17);
+        if (fordVinPattern.test(possibleVin)) {
+          return possibleVin;
+        }
+      }
+      
+      // If it's shorter than 17 but at least 8 characters, it might be a partial VIN
+      if (code.length >= 8 && code.length < 17) {
+        // Check if it matches the end of a Ford VIN pattern (last 8+ characters)
+        if (/^[A-HJ-NPR-Z0-9]+$/.test(code)) {
+          return code; // Return the partial VIN
+        }
+      }
+      
+      return null; // No valid VIN found
+    }
+    
+    // Check if a string is likely a Ford VIN
+    function isFordVin(vin) {
+      // Must be 17 characters and match the pattern
+      if (vin.length !== 17 || !fordVinPattern.test(vin)) {
+        return false;
+      }
+      
+      // Check for Ford manufacturer prefix
+      for (const prefix of fordVinPrefixes) {
+        if (vin.startsWith(prefix)) {
+          return true;
+        }
+      }
+      
+      return false;
+    }
+
+    // Manual photo capture for barcode detection
+    function captureBarcode() {
+      if (!videoStream) {
+        scanStatus.textContent = 'Camera not available';
+        return;
+      }
+      
+      try {
+        scanStatus.textContent = 'Processing...';
+        
+        const context = captureCanvas.getContext('2d');
+        const videoWidth = videoElement.videoWidth;
+        const videoHeight = videoElement.videoHeight;
+        
+        // Ensure canvas is correctly sized
+        captureCanvas.width = videoWidth;
+        captureCanvas.height = videoHeight;
+        
+        // Draw the current video frame to the canvas
+        context.drawImage(videoElement, 0, 0, videoWidth, videoHeight);
+        
+        // Get the image data URL
+        const imageDataUrl = captureCanvas.toDataURL('image/jpeg', 0.9);
+        
+        // Try ZXing first for better accuracy if available
+        if (codeReader && window.libraryStatus.zxing) {
+          try {
+            // Create an Image object to load the data URL
+            const img = new Image();
+            img.crossOrigin = "anonymous"; // Avoid CORS issues
+            
+            img.onload = function() {
+              try {
+                // Use ZXing to decode the image
+                codeReader.decodeFromImage(undefined, imageDataUrl)
+                  .then(result => {
+                    if (result && result.text) {
+                      const code = result.text.trim().toUpperCase();
+                      logDebug(`ZXing decoded: ${code} (Format: ${result.format})`);
+                      processDetectedCode(code, result.format);
+                    } else {
+                      // Fall back to Quagga if ZXing fails
+                      decodeWithQuagga(imageDataUrl);
+                    }
+                  })
+                  .catch(err => {
+                    logDebug(`ZXing error: ${err.message}`);
+                    // Fall back to Quagga
+                    decodeWithQuagga(imageDataUrl);
+                  });
+              } catch (e) {
+                logDebug(`ZXing processing error: ${e.message}`);
+                decodeWithQuagga(imageDataUrl);
+              }
+            };
+            
+            img.src = imageDataUrl;
+          } catch (e) {
+            logDebug(`ZXing setup error: ${e.message}`);
+            decodeWithQuagga(imageDataUrl);
+          }
+        } else {
+          // ZXing not available, use Quagga
+          decodeWithQuagga(imageDataUrl);
+        }
+      } catch (e) {
+        console.error('Capture error:', e);
+        scanStatus.textContent = 'Error processing image';
+        logDebug(`Capture error: ${e.message}`);
+      }
+    }
+    
+    // Fallback to Quagga for image decoding
+    function decodeWithQuagga(imageDataUrl) {
+      // Check if Quagga is available
+      if (!window.libraryStatus.quagga) {
+        scanStatus.textContent = 'Barcode scanner unavailable';
+        setTimeout(() => {
+          scanStatus.textContent = 'Please enter VIN manually';
+        }, 2000);
+        return;
+      }
+      
+      // Use Quagga to decode the barcode in the still image
+      try {
+        Quagga.decodeSingle({
+          decoder: {
+            readers: [
+              { format: "code_39_reader", config: { supplements: [] } },
+              { format: "code_128_reader", config: { supplements: [] } }
+            ]
+          },
+          locate: true,
+          src: imageDataUrl
+        }, function(result) {
+          if (result && result.codeResult) {
+            const code = result.codeResult.code.trim().toUpperCase();
+            logDebug(`Quagga decoded: ${code} (Format: ${result.codeResult.format})`);
+            processDetectedCode(code, result.codeResult.format);
+          } else {
+            scanStatus.textContent = 'No barcode found. Try again or enter manually';
+          }
+        });
+      } catch (e) {
+        console.error('Quagga decoding error:', e);
+        scanStatus.textContent = 'Error decoding barcode';
+        logDebug(`Quagga decoding error: ${e.message}`);
+      }
+    }
+
+    function setVinResult(vinCode) {
+      // Set the VIN field with the scanned or manually entered code
+      vin.value = vinCode;
+      
+      // Check if it's a Ford VIN and add visual indicator
+      if (isFordVin(vinCode)) {
+        vin.classList.add('ford-vin-detected');
+      } else {
+        vin.classList.remove('ford-vin-detected');
+      }
+      
+      // Highlight the field briefly to show success
+      vin.style.backgroundColor = "#d4edda";
+      setTimeout(() => {
+        vin.style.backgroundColor = "";
+      }, 1500);
+    }
+
+    function stopScanner() {
+      scanning = false;
+      
+      // Turn off torch if active
+      if (torchActive && videoTrack) {
+        try {
+          videoTrack.applyConstraints({ advanced: [{ torch: false }] });
+        } catch (e) {
+          console.log("Could not turn off torch:", e);
+        }
+        torchActive = false;
+      }
+      
+      // Stop ZXing reader if available
+      if (codeReader && window.libraryStatus.zxing) {
+        try {
+          codeReader.reset();
+        } catch (e) {
+          console.log("Error stopping ZXing:", e);
+        }
+      }
+      
+      // Stop Quagga scanner if running
+      stopQuaggaScanner();
+      
+      // Stop video stream
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => {
+          if (track.readyState === 'live') {
+            track.stop();
+          }
+        });
+        videoElement.srcObject = null;
+        videoTrack = null;
+      }
+      
+      // Reset UI/Layout
+      cleanupScanner();
+    }
+    
+    // Debug logging helper
+    function logDebug(message) {
+      if (DEBUG_MODE) {
+        console.log(`[DEBUG] ${message}`);
+        debugPanel.textContent = message;
+      }
+    }
+    
+    // Handle page unload
+    window.addEventListener('beforeunload', () => {
+      if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+      }
+      if (scannerActive) {
+        try {
+          Quagga.stop();
+        } catch (e) {
+          console.log("Error stopping Quagga:", e);
+        }
+      }
+      if (codeReader && window.libraryStatus.zxing) {
+        try {
+          codeReader.reset();
+        } catch (e) {
+          console.log("Error stopping ZXing:", e);
+        }
       }
     });
   }
-
-  function setVinResult(vinCode) {
-    // Set the VIN field with the scanned or manually entered code
-    vin.value = vinCode;
-    
-    // Check if it's a Ford VIN and add visual indicator
-    if (isFordVin(vinCode)) {
-      vin.classList.add('ford-vin-detected');
-    } else {
-      vin.classList.remove('ford-vin-detected');
-    }
-    
-    // Highlight the field briefly to show success
-    vin.style.backgroundColor = "#d4edda";
-    setTimeout(() => {
-      vin.style.backgroundColor = "";
-    }, 1500);
-  }
-
-  function stopScanner() {
-    scanning = false;
-    
-    // Turn off torch if active
-    if (torchActive && videoTrack) {
-      try {
-        videoTrack.applyConstraints({ advanced: [{ torch: false }] });
-      } catch (e) {
-        console.log("Could not turn off torch:", e);
-      }
-      torchActive = false;
-    }
-    
-    // Stop ZXing reader
-    try {
-      codeReader.reset();
-    } catch (e) {
-      console.log("Error stopping ZXing:", e);
-    }
-    
-    // Stop Quagga scanner if running
-    stopQuaggaScanner();
-    
-    // Stop video stream
-    if (videoStream) {
-      videoStream.getTracks().forEach(track => {
-        if (track.readyState === 'live') {
-          track.stop();
-        }
-      });
-      videoElement.srcObject = null;
-      videoTrack = null;
-    }
-    
-    // Reset UI/Layout
-    cleanupScanner();
-  }
-  
-  // Debug logging helper
-  function logDebug(message) {
-    if (DEBUG_MODE) {
-      console.log(`[DEBUG] ${message}`);
-      debugPanel.textContent = message;
-    }
-  }
-  
-  // Handle page unload
-  window.addEventListener('beforeunload', () => {
-    if (videoStream) {
-      videoStream.getTracks().forEach(track => track.stop());
-    }
-    if (scannerActive) {
-      try {
-        Quagga.stop();
-      } catch (e) {
-        console.log("Error stopping Quagga:", e);
-      }
-    }
-    try {
-      codeReader.reset();
-    } catch (e) {
-      console.log("Error stopping ZXing:", e);
-    }
-  });
 </script>
 </body>
 </html>
