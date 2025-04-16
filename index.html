@@ -104,7 +104,7 @@
       background-color: #5a6268;
     }
     
-    /* New simplified scanner */
+    /* Scanner Container */
     #scanner-container {
       position: fixed;
       top: 0;
@@ -116,28 +116,7 @@
       display: none;
     }
     
-    #scanner-preview {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    
-    .scan-region {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 80%;
-      height: 150px;
-      border: 2px solid rgba(255, 255, 255, 0.8);
-      border-radius: 10px;
-      box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.5);
-    }
-    
-    .scan-status {
+    #scanner-message {
       position: absolute;
       top: 20px;
       left: 50%;
@@ -148,10 +127,11 @@
       border-radius: 20px;
       font-size: 14px;
       z-index: 4;
+      min-width: 200px;
       text-align: center;
     }
     
-    .scanner-instructions {
+    #scanner-instructions {
       position: absolute;
       bottom: 150px;
       left: 0;
@@ -165,22 +145,7 @@
       text-shadow: 0 0 10px rgba(0,0,0,0.8);
     }
     
-    .barcode-result {
-      position: absolute;
-      top: 70px;
-      left: 0;
-      width: 100%;
-      text-align: center;
-      color: white;
-      padding: 8px;
-      font-size: 16px;
-      font-weight: bold;
-      z-index: 3;
-      background-color: rgba(0, 52, 120, 0.8);
-      display: none;
-    }
-    
-    .close-scanner {
+    #scanner-close {
       position: absolute;
       top: 20px;
       right: 20px;
@@ -196,66 +161,101 @@
       font-weight: bold;
       cursor: pointer;
       z-index: 3;
-      -webkit-tap-highlight-color: transparent;
     }
     
-    .control-buttons {
+    #scanner-buttons {
       position: absolute;
-      bottom: 80px;
+      bottom: 60px;
       left: 0;
       width: 100%;
       display: flex;
       justify-content: center;
       gap: 20px;
-      z-index: 10;
+      z-index: 5;
     }
     
-    .control-button {
-      background-color: var(--ford-blue);
-      color: white;
-      border: none;
-      border-radius: 30px;
-      padding: 12px 24px;
-      font-weight: bold;
+    #scanner-buttons button {
       width: auto;
-      max-width: 200px;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 16px;
     }
     
-    .manual-input-panel {
+    /* Scanner Result */
+    #scanner-result {
+      position: absolute;
+      bottom: 120px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      color: white;
+      padding: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      display: none;
+      background-color: rgba(40, 167, 69, 0.7);
+    }
+    
+    /* Manual VIN Input */
+    #manual-input {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       background: white;
       padding: 20px;
-      border-radius: 12px;
+      border-radius: 10px;
       width: 80%;
       max-width: 300px;
-      z-index: 20;
+      z-index: 6;
       display: none;
     }
     
-    .manual-input-panel h3 {
-      color: var(--ford-blue);
+    #manual-input h3 {
       margin-top: 0;
+      color: var(--ford-blue);
     }
     
-    .manual-input-panel input {
+    #manual-vin {
       margin: 15px 0;
     }
     
-    .manual-input-buttons {
+    #manual-buttons {
       display: flex;
       gap: 10px;
     }
     
-    .success-flash {
-      animation: success-flash-anim 1s ease-out;
+    #manual-buttons button {
+      margin-top: 10px;
     }
     
-    @keyframes success-flash-anim {
-      0% { background-color: rgba(40, 167, 69, 0.7); }
-      100% { background-color: rgba(40, 167, 69, 0); }
+    /* Quagga JS elements */
+    #interactive {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    
+    #interactive canvas, #interactive video {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      left: 0;
+      top: 0;
+    }
+    
+    /* Highlight box */
+    #scan-highlight {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 150px;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      border-radius: 10px;
+      box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.5);
+      z-index: 1;
     }
     
     .loading-overlay {
@@ -333,8 +333,8 @@
     emailjs.init("c7_t3EOBwGHFIPCKm");
   </script>
   
-  <!-- Simple barcode scanner library -->
-  <script src="https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.10.0/dist/index.js"></script>
+  <!-- Quagga JS for barcode scanning -->
+  <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 </head>
 <body>
 <h1>Midway Ford</h1>
@@ -420,26 +420,27 @@
   </div>
 </div>
 
-<!-- New Simplified Scanner -->
+<!-- Scanner Interface -->
 <div id="scanner-container">
-  <video id="scanner-preview" playsinline></video>
-  <div class="scan-region"></div>
-  <div class="scan-status">Initializing camera...</div>
-  <div class="scanner-instructions">Position VIN barcode within the box</div>
-  <div class="barcode-result"></div>
-  <div class="close-scanner">×</div>
+  <div id="scanner-message">Starting camera...</div>
+  <div id="scanner-instructions">Position VIN barcode in view</div>
+  <div id="scan-highlight"></div>
+  <div id="scanner-close">×</div>
+  <div id="scanner-result"></div>
+
+  <div id="interactive" class="viewport"></div>
   
-  <div class="control-buttons">
-    <button class="control-button" id="manual-input-btn">Enter VIN Manually</button>
+  <div id="scanner-buttons">
+    <button id="manual-button">Enter VIN Manually</button>
   </div>
   
-  <!-- Manual input panel -->
-  <div class="manual-input-panel">
+  <!-- Manual Input Panel -->
+  <div id="manual-input">
     <h3>Enter VIN Manually</h3>
-    <input type="text" id="manual-vin-input" placeholder="Enter VIN" maxlength="17">
-    <div class="manual-input-buttons">
-      <button id="confirm-manual-vin">Confirm</button>
-      <button id="cancel-manual-vin" class="secondary">Cancel</button>
+    <input type="text" id="manual-vin" placeholder="Enter VIN" maxlength="17">
+    <div id="manual-buttons">
+      <button id="confirm-manual">Confirm</button>
+      <button id="cancel-manual" class="secondary">Cancel</button>
     </div>
   </div>
 </div>
@@ -469,15 +470,14 @@
   
   // Scanner elements
   const scannerContainer = document.getElementById("scanner-container");
-  const previewElement = document.getElementById("scanner-preview");
-  const closeButton = document.querySelector(".close-scanner");
-  const scanStatus = document.querySelector(".scan-status");
-  const barcodeResult = document.querySelector(".barcode-result");
-  const manualInputBtn = document.getElementById("manual-input-btn");
-  const manualInputPanel = document.querySelector(".manual-input-panel");
-  const manualVinInput = document.getElementById("manual-vin-input");
-  const confirmManualVin = document.getElementById("confirm-manual-vin");
-  const cancelManualVin = document.getElementById("cancel-manual-vin");
+  const scannerMessage = document.getElementById("scanner-message");
+  const scannerResult = document.getElementById("scanner-result");
+  const scannerClose = document.getElementById("scanner-close");
+  const manualButton = document.getElementById("manual-button");
+  const manualInput = document.getElementById("manual-input");
+  const manualVin = document.getElementById("manual-vin");
+  const confirmManual = document.getElementById("confirm-manual");
+  const cancelManual = document.getElementById("cancel-manual");
   
   // Confirmation fields
   const confVin = document.getElementById("conf-vin");
@@ -498,14 +498,8 @@
   const cBillTo = document.getElementById("c-billTo");
   const cUser = document.getElementById("c-user");
   
-  // VIN validation pattern
+  // VIN validation pattern - Ford VINs typically start with 1F
   const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{8,17}$/i;
-  
-  // Scanner variables
-  let videoStream = null;
-  let scannerActive = false;
-  let scannerProcessor = null;
-  let scanInterval = null;
   
   // Set current date
   const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
@@ -632,149 +626,129 @@
     fuelForm.classList.add("visible");
   }
 
-  // ------- SIMPLIFIED SCANNER CODE -------
+  // ------- BARCODE SCANNER CODE -------
   
-  // Initialize canvas for barcode scanning
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let quaggaState = false;
+  let scanDetectionCount = {};
+  let lastProcessedTime = 0;
   
-  // Simple barcode scanner
-  async function startScanner() {
-    try {
-      // Reset state and show scanner
-      document.body.classList.add('scanning');
-      scannerContainer.style.display = 'block';
-      scanStatus.textContent = 'Starting camera...';
-      barcodeResult.style.display = 'none';
-      manualInputPanel.style.display = 'none';
-      
-      // Initialize ZBar WASM scanner
-      if (!scannerProcessor) {
-        try {
-          scannerProcessor = await ZBarWasm.createInstance();
-        } catch (e) {
-          console.error("Failed to initialize scanner:", e);
-          scanStatus.textContent = 'Scanner initialization failed. Try manual input.';
-          return;
-        }
+  // Start the barcode scanner
+  function startScanner() {
+    // Show scanner UI
+    document.body.classList.add('scanning');
+    scannerContainer.style.display = 'block';
+    scannerMessage.textContent = 'Starting camera...';
+    scannerResult.style.display = 'none';
+    manualInput.style.display = 'none';
+    
+    // Reset scan detections
+    scanDetectionCount = {};
+    
+    // Initialize Quagga
+    initQuagga();
+  }
+  
+  function initQuagga() {
+    // Config for Ford VIN barcodes (typically Code 39 or Code 128)
+    Quagga.init({
+      inputStream: {
+        name: "Live",
+        type: "LiveStream",
+        target: document.getElementById("interactive"),
+        constraints: {
+          width: { min: 640 },
+          height: { min: 480 },
+          facingMode: "environment",
+          aspectRatio: { min: 1, max: 2 }
+        },
+      },
+      locator: {
+        patchSize: "medium",
+        halfSample: true
+      },
+      numOfWorkers: 2,
+      frequency: 10,
+      decoder: {
+        readers: [
+          "code_39_reader", // Primary type for VIN barcodes
+          "code_128_reader" // Backup type
+        ],
+        multiple: false
+      },
+      locate: true
+    }, function(err) {
+      if (err) {
+        console.error("Quagga initialization failed:", err);
+        scannerMessage.textContent = "Camera failed. Try manual input.";
+        return;
       }
-      
-      // Request camera with moderate constraints
-      const constraints = {
-        audio: false,
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      };
-      
-      // Access camera
-      videoStream = await navigator.mediaDevices.getUserMedia(constraints);
-      previewElement.srcObject = videoStream;
-      
-      // Start video
-      await previewElement.play();
       
       // Start scanning
-      scannerActive = true;
-      scanStatus.textContent = 'Scanning for VIN barcode...';
+      quaggaState = true;
+      Quagga.start();
+      scannerMessage.textContent = "Scanning for Ford VIN barcode...";
       
-      // Start interval scanning
-      startBarcodeScanning();
-      
-    } catch (err) {
-      console.error('Camera error:', err);
-      scanStatus.textContent = 'Camera access failed. Try manual input.';
-    }
-  }
-  
-  function startBarcodeScanning() {
-    // Clear any existing interval
-    if (scanInterval) clearInterval(scanInterval);
-    
-    // Set up interval to scan for barcodes
-    scanInterval = setInterval(() => {
-      if (!scannerActive) return;
-      
-      try {
-        // Check if video is ready
-        if (previewElement.readyState !== previewElement.HAVE_ENOUGH_DATA) return;
+      // Process detected barcodes
+      Quagga.onDetected(function(result) {
+        if (!quaggaState) return;
         
-        // Get video dimensions
-        const width = previewElement.videoWidth;
-        const height = previewElement.videoHeight;
+        const code = result.codeResult.code.trim().toUpperCase();
+        const confidence = result.codeResult.confidence;
         
-        if (!width || !height) return;
-        
-        // Configure canvas to match video
-        canvas.width = width;
-        canvas.height = height;
-        
-        // Draw video frame to canvas
-        ctx.drawImage(previewElement, 0, 0, width, height);
-        
-        // Get image data from canvas
-        const imageData = ctx.getImageData(0, 0, width, height);
-        
-        // Process with scanner
-        processFrameForBarcodes(imageData);
-        
-      } catch (e) {
-        console.error("Scan error:", e);
-      }
-    }, 200); // Scan at a reasonable interval
-  }
-  
-  async function processFrameForBarcodes(imageData) {
-    try {
-      // Scan the image for barcodes
-      const symbols = await scannerProcessor.scanImage(
-        imageData.data,
-        imageData.width,
-        imageData.height
-      );
-      
-      // Process results
-      if (symbols && symbols.length > 0) {
-        // Get the first barcode found
-        const barcode = symbols[0];
-        const code = barcode.decode().trim().toUpperCase();
-        
-        // Check if it's a valid VIN
-        if (VIN_REGEX.test(code)) {
-          handleDetectedVIN(code);
+        // Process valid VIN codes only
+        if (code && VIN_REGEX.test(code)) {
+          processDetectedBarcode(code, confidence);
         }
-      }
-    } catch (e) {
-      // Ignore processing errors
+      });
+    });
+  }
+  
+  function processDetectedBarcode(code, confidence) {
+    // Avoid processing too frequently
+    const now = Date.now();
+    if (now - lastProcessedTime < 200) return;
+    lastProcessedTime = now;
+    
+    // Count detections of this code
+    if (!scanDetectionCount[code]) {
+      scanDetectionCount[code] = { count: 1, confidence: confidence };
+    } else {
+      scanDetectionCount[code].count++;
+      scanDetectionCount[code].confidence = Math.max(scanDetectionCount[code].confidence, confidence);
+    }
+    
+    // Show current detection
+    scannerMessage.textContent = `Detected: ${code.substring(0, 10)}...`;
+    
+    // Accept code if:
+    // 1. High confidence (>75) and seen at least once, or
+    // 2. Medium confidence (>60) and seen at least twice, or
+    // 3. Any confidence but seen 3+ times
+    const data = scanDetectionCount[code];
+    
+    if ((data.confidence > 75) || 
+        (data.confidence > 60 && data.count >= 2) || 
+        (data.count >= 3)) {
+        
+      // Success - we have a valid VIN
+      scannerResult.textContent = `VIN Detected: ${code}`;
+      scannerResult.style.display = 'block';
+      
+      // Stop scanning
+      quaggaState = false;
+      
+      // Set the VIN after a short delay for visual feedback
+      setTimeout(() => {
+        setVinAndClose(code);
+      }, 800);
     }
   }
   
-  function handleDetectedVIN(code) {
-    // Display the detected code
-    barcodeResult.textContent = code;
-    barcodeResult.style.display = 'block';
-    
-    // Show success
-    scanStatus.textContent = 'VIN detected!';
-    const scanRegion = document.querySelector('.scan-region');
-    scanRegion.classList.add('success-flash');
-    
-    // Stop scanning
-    scannerActive = false;
-    
-    // Use the VIN after a small delay for visual feedback
-    setTimeout(() => {
-      setVinAndCloseScanner(code);
-    }, 800);
-  }
-  
-  function setVinAndCloseScanner(code) {
-    // Set the VIN in the form
+  function setVinAndClose(code) {
+    // Set the VIN in the form field
     vin.value = code;
     
-    // Highlight success in form
+    // Highlight success
     vin.style.backgroundColor = "#d4edda";
     setTimeout(() => {
       vin.style.backgroundColor = "";
@@ -785,42 +759,37 @@
   }
   
   function stopScanner() {
-    // Stop scanning
-    scannerActive = false;
-    if (scanInterval) clearInterval(scanInterval);
-    
-    // Stop video stream
-    if (videoStream) {
-      videoStream.getTracks().forEach(track => track.stop());
-      videoStream = null;
+    // Stop Quagga
+    if (quaggaState) {
+      quaggaState = false;
+      try {
+        Quagga.stop();
+      } catch (e) {
+        console.error("Error stopping Quagga:", e);
+      }
     }
-    
-    // Reset video element
-    previewElement.srcObject = null;
     
     // Reset UI
     document.body.classList.remove('scanning');
     scannerContainer.style.display = 'none';
-    const scanRegion = document.querySelector('.scan-region');
-    scanRegion.classList.remove('success-flash');
   }
   
   // Manual VIN input functions
   function showManualInput() {
-    manualInputPanel.style.display = 'block';
-    manualVinInput.focus();
+    manualInput.style.display = 'block';
+    manualVin.focus();
   }
   
   function hideManualInput() {
-    manualInputPanel.style.display = 'none';
-    manualVinInput.value = '';
+    manualInput.style.display = 'none';
+    manualVin.value = '';
   }
   
-  function confirmManualVinCode() {
-    const manualCode = manualVinInput.value.trim().toUpperCase();
-    if (manualCode.length >= 8) {
+  function confirmManualVin() {
+    const code = manualVin.value.trim().toUpperCase();
+    if (code.length >= 8) {
       hideManualInput();
-      setVinAndCloseScanner(manualCode);
+      setVinAndClose(code);
     } else {
       alert("Please enter at least 8 characters of the VIN");
     }
@@ -828,16 +797,17 @@
   
   // Event listeners
   document.getElementById("scanBtn").addEventListener("click", startScanner);
-  closeButton.addEventListener("click", stopScanner);
-  manualInputBtn.addEventListener("click", showManualInput);
-  confirmManualVin.addEventListener("click", confirmManualVinCode);
-  cancelManualVin.addEventListener("click", hideManualInput);
+  scannerClose.addEventListener("click", stopScanner);
+  manualButton.addEventListener("click", showManualInput);
+  confirmManual.addEventListener("click", confirmManualVin);
+  cancelManual.addEventListener("click", hideManualInput);
   
-  // Cleanup on page unload
+  // Cleanup when leaving page
   window.addEventListener('beforeunload', () => {
-    if (scanInterval) clearInterval(scanInterval);
-    if (videoStream) {
-      videoStream.getTracks().forEach(track => track.stop());
+    if (quaggaState) {
+      try {
+        Quagga.stop();
+      } catch (e) {}
     }
   });
 </script>
