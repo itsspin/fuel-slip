@@ -165,6 +165,15 @@
       overflow: hidden;
     }
     
+    #scanner-video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
     #scanner-overlay {
       position: absolute;
       top: 0;
@@ -377,11 +386,35 @@
     #torch-toggle.active {
       background: rgba(255, 255, 0, 0.3);
     }
+    
+    /* Canvas for barcode detection */
+    #capture-canvas {
+      display: none;
+      position: absolute;
+    }
+    
+    /* iOS-specific tweaks */
+    /* Add padding for devices with notches and home indicators */
+    @supports (padding-bottom: env(safe-area-inset-bottom)) {
+      #scanner-container {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      #scan-modes {
+        bottom: calc(80px + env(safe-area-inset-bottom));
+      }
+      
+      #scan-feedback {
+        bottom: env(safe-area-inset-bottom);
+      }
+    }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 <script>
   emailjs.init("test");
 </script>
+<script src="https://unpkg.com/@zxing/library@0.19.1"></script>
 </head>
 <body>
 <h1>Midway Ford</h1>
@@ -500,6 +533,8 @@
       <button id="cancel-manual" class="secondary">Cancel</button>
     </div>
   </div>
+  
+  <canvas id="capture-canvas"></canvas>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -526,6 +561,7 @@
   const cancelManual = document.getElementById("cancel-manual");
   const enterManually = document.getElementById("enter-manually");
   const barcodeMode = document.getElementById("barcode-mode");
+  const captureCanvas = document.getElementById("capture-canvas");
 
   const vin = document.getElementById("vin");
   const start = document.getElementById("startGallons");
@@ -543,6 +579,13 @@
   let barcodeDetector = null;
   let scanActive = false;
   let scanInterval = null;
+  let codeReader = null;
+  let lastProcessedTime = 0;
+  
+  // Detect operating systems
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /android/i.test(navigator.userAgent);
 
   const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
   date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
@@ -567,6 +610,17 @@
 
   // Check if BarcodeDetector is supported
   const barcodeDetectorSupported = 'BarcodeDetector' in window;
+  
+  // Initialize ZXing reader for fallback
+  try {
+    const { BrowserMultiFormatReader } = window.ZXing;
+    if (BrowserMultiFormatReader) {
+      codeReader = new BrowserMultiFormatReader();
+      console.log("ZXing initialized successfully");
+    }
+  } catch (err) {
+    console.error("ZXing initialization error:", err);
+  }
 
   if (localStorage.getItem("fuelLogin") === "yes") {
     loginScreen.classList.remove("visible");
@@ -696,21 +750,38 @@
     try {
       // Create BarcodeDetector if supported
       if (barcodeDetectorSupported) {
-        barcodeDetector = new BarcodeDetector({
-          formats: ['code_39', 'code_128']
-        });
+        try {
+          barcodeDetector = new BarcodeDetector({
+            formats: ['code_39', 'code_128']
+          });
+        } catch (e) {
+          console.error("BarcodeDetector initialization error:", e);
+          barcodeDetector = null;
+        }
       }
       
-      // Start camera with rear facing camera
-      const constraints = {
+      // Prepare camera constraints based on platform
+      let constraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
         },
         audio: false
       };
       
+      // Platform-specific adjustments
+      if (isIOS) {
+        // iOS sometimes works better with simpler constraints
+        constraints.video = { facingMode: 'environment' };
+      } else if (isAndroid) {
+        // Android can handle more detailed constraints
+        constraints.video = {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        };
+      }
+      
+      // Start the camera
       videoStream = await navigator.mediaDevices.getUserMedia(constraints);
       videoTrack = videoStream.getVideoTracks()[0];
       
@@ -720,7 +791,22 @@
       
       // Set video source
       scannerVideo.srcObject = videoStream;
-      await scannerVideo.play();
+      
+      // Special handling for iOS Safari which sometimes doesn't play automatically
+      try {
+        await scannerVideo.play();
+      } catch (playError) {
+        console.error("Error playing video:", playError);
+        // For iOS Safari, we might need user interaction
+        if (isIOS) {
+          scanFeedback.textContent = 'Tap screen to activate camera';
+          scannerVideo.addEventListener('click', function activateCamera() {
+            scannerVideo.play();
+            scannerVideo.removeEventListener('click', activateCamera);
+            scanFeedback.textContent = 'Position VIN barcode in the box';
+          }, { once: true });
+        }
+      }
       
       // Start barcode detection
       startBarcodeDetection();
@@ -738,6 +824,7 @@
     
     // Method 1: Use BarcodeDetector API if supported (modern browsers)
     if (barcodeDetectorSupported && barcodeDetector) {
+      console.log("Using BarcodeDetector API");
       scanInterval = setInterval(async () => {
         if (!scanActive) return;
         
@@ -758,30 +845,73 @@
         }
       }, 200);
     } 
-    // Method 2: Use ZXing-based JavaScript approach as fallback
-    else {
-      // Using a simple approach with repeated frame grabbing
+    // Method 2: Use ZXing-based approach
+    else if (codeReader) {
+      console.log("Using ZXing library");
       scanInterval = setInterval(() => {
         if (!scanActive) return;
         
-        // Here we would implement ZXing.js or another library
-        // However, this is placeholder code that uses a simple detection simulation
+        // Only process every 200ms to avoid overloading the CPU
+        const now = Date.now();
+        if (now - lastProcessedTime < 200) return;
+        lastProcessedTime = now;
         
-        // Simulate barcode detection (in real implementation, replace with proper ZXing processing)
-        detectBarcode();
+        // Capture frame for ZXing processing
+        captureFrameAndDecode();
       }, 200);
       
       scanFeedback.textContent = 'Scanning for VIN barcode...';
     }
+    // Fallback to manual capture only
+    else {
+      console.log("No barcode library available, using manual mode only");
+      scanFeedback.textContent = 'Barcode detection not available on this device. Please enter VIN manually.';
+    }
   }
   
-  // Simulate barcode detection (for fallback method)
-  // In a real implementation, this would use a proper barcode library like ZXing.js
-  async function detectBarcode() {
-    // This is where we would use a JavaScript barcode library
-    // For now, we're including a placeholder that allows manual entry
-    
-    // In a real implementation, this would process video frames to detect barcodes
+  // Capture frame and process with ZXing
+  function captureFrameAndDecode() {
+    try {
+      const canvas = captureCanvas;
+      const ctx = canvas.getContext('2d');
+      
+      // Set canvas dimensions to match video
+      canvas.width = scannerVideo.videoWidth;
+      canvas.height = scannerVideo.videoHeight;
+      
+      // Draw current video frame to canvas
+      ctx.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height);
+      
+      // Get image data as base64
+      const imageData = canvas.toDataURL('image/jpeg', 0.75);
+      
+      // Create an image element to load the data URL
+      const img = new Image();
+      img.onload = function() {
+        try {
+          // Use ZXing to decode the image
+          codeReader.decodeFromImage(undefined, imageData)
+            .then(result => {
+              if (result && result.text) {
+                const code = result.text.trim().toUpperCase();
+                if (isValidVIN(code)) {
+                  handleSuccessfulScan(code);
+                }
+              }
+            })
+            .catch(err => {
+              // Silently fail - normal for frames without barcodes
+              // console.error("ZXing decode error:", err);
+            });
+        } catch (e) {
+          console.error("ZXing processing error:", e);
+        }
+      };
+      
+      img.src = imageData;
+    } catch (e) {
+      console.error("Frame capture error:", e);
+    }
   }
 
   // Check if a code is a valid VIN
@@ -862,9 +992,25 @@
     
     try {
       torchActive = !torchActive;
-      videoTrack.applyConstraints({
-        advanced: [{ torch: torchActive }]
-      });
+      
+      // Different handling for iOS
+      if (isIOS) {
+        // iOS sometimes needs this specific format
+        videoTrack.applyConstraints({
+          advanced: [{ torch: torchActive }]
+        }).catch(error => {
+          console.error("iOS torch error:", error);
+          scanFeedback.textContent = "Flashlight not available on this device";
+          setTimeout(() => {
+            scanFeedback.textContent = "Position VIN barcode in the box";
+          }, 2000);
+        });
+      } else {
+        // Standard approach for other devices
+        videoTrack.applyConstraints({
+          advanced: [{ torch: torchActive }]
+        });
+      }
       
       torchToggle.classList.toggle('active', torchActive);
     } catch (error) {
@@ -936,31 +1082,29 @@
     }
   });
   
+  // Support for fullscreen click activation (helps on iOS)
+  scannerVideo.addEventListener('click', function() {
+    if (isIOS && scannerVideo.paused) {
+      scannerVideo.play().catch(err => {
+        console.error("Error playing video after click:", err);
+      });
+    }
+  });
+  
   // Handle page unload - clean up resources
   window.addEventListener('beforeunload', () => {
     if (videoStream) {
       videoStream.getTracks().forEach(track => track.stop());
     }
+    
+    if (codeReader) {
+      try {
+        codeReader.reset();
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    }
   });
-  
-  // Load additional barcode detection library if needed
-  if (!barcodeDetectorSupported) {
-    // In a real implementation, we would load an alternative library here
-    console.log('BarcodeDetector not supported - would load alternative library');
-  }
-</script>
-
-<!-- Optional: Load a fallback barcode library when needed -->
-<script>
-  // This script would dynamically load a fallback barcode scanner library for browsers
-  // that don't support the Barcode Detection API
-  if (!('BarcodeDetector' in window)) {
-    // This is where we would load an alternative library like ZXing.js or QuaggaJS
-    // For example: 
-    // const script = document.createElement('script');
-    // script.src = 'https://unpkg.com/@zxing/library@latest';
-    // document.head.appendChild(script);
-  }
 </script>
 </body>
 </html>
