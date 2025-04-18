@@ -264,6 +264,29 @@
       background: rgba(0, 0, 0, 0.7);
     }
     
+    #scan-result {
+      position: absolute;
+      bottom: 140px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      padding: 0 20px;
+      box-sizing: border-box;
+    }
+    
+    #scan-result-display {
+      background: rgba(255, 255, 255, 0.9);
+      color: black;
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin: 0 auto;
+      max-width: 300px;
+      font-family: monospace;
+      font-size: 16px;
+      letter-spacing: 1px;
+      display: none;
+    }
+    
     #manual-input-container {
       position: absolute;
       top: 50%;
@@ -517,6 +540,10 @@
     
     <button id="torch-toggle">💡</button>
     
+    <div id="scan-result">
+      <div id="scan-result-display"></div>
+    </div>
+    
     <div id="scan-modes">
       <button id="barcode-mode" class="active">Barcode</button>
       <button id="enter-manually">Enter Manually</button>
@@ -562,6 +589,7 @@
   const enterManually = document.getElementById("enter-manually");
   const barcodeMode = document.getElementById("barcode-mode");
   const captureCanvas = document.getElementById("capture-canvas");
+  const scanResultDisplay = document.getElementById("scan-result-display");
 
   const vin = document.getElementById("vin");
   const start = document.getElementById("startGallons");
@@ -581,6 +609,7 @@
   let scanInterval = null;
   let codeReader = null;
   let lastProcessedTime = 0;
+  let recentScans = []; // Track recent scans for consistency
   
   // Detect operating systems
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
@@ -613,10 +642,18 @@
   
   // Initialize ZXing reader for fallback
   try {
-    const { BrowserMultiFormatReader } = window.ZXing;
+    const { BrowserMultiFormatReader, DecodeHintType } = window.ZXing;
     if (BrowserMultiFormatReader) {
-      codeReader = new BrowserMultiFormatReader();
-      console.log("ZXing initialized successfully");
+      // Set hints for better VIN scanning
+      const hints = new Map();
+      if (DecodeHintType) {
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        // Focus specifically on Code 39 which is common for VINs
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, ["CODE_39", "CODE_128"]);
+      }
+      
+      codeReader = new BrowserMultiFormatReader(hints);
+      console.log("ZXing initialized successfully with hints");
     }
   } catch (err) {
     console.error("ZXing initialization error:", err);
@@ -739,10 +776,12 @@
     fuelForm.classList.add("visible");
   }
 
-  // VIN Scanner Implementation
+  // VIN Scanner Implementation with enhanced accuracy for trailing digits
   async function startScanner() {
     scannerContainer.classList.add('visible');
     manualInputContainer.style.display = 'none';
+    scanResultDisplay.style.display = 'none';
+    recentScans = [];
     
     // Reset scanner feedback
     scanFeedback.textContent = 'Starting camera...';
@@ -785,6 +824,17 @@
       videoStream = await navigator.mediaDevices.getUserMedia(constraints);
       videoTrack = videoStream.getVideoTracks()[0];
       
+      // Try to set focus mode to fixed or continuous
+      if (videoTrack.getCapabilities && videoTrack.getCapabilities().focusMode) {
+        const focusModes = videoTrack.getCapabilities().focusMode;
+        // Check what focus modes are available
+        if (focusModes.includes('continuous')) {
+          await videoTrack.applyConstraints({ focusMode: 'continuous' });
+        } else if (focusModes.includes('fixed')) {
+          await videoTrack.applyConstraints({ focusMode: 'fixed' });
+        }
+      }
+      
       // Check if torch is available
       const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
       torchToggle.style.display = capabilities.torch ? 'flex' : 'none';
@@ -818,28 +868,47 @@
     }
   }
 
-  // Improved VIN cleaning function
+  // Improved VIN cleaning function with focused improvements for trailing digits
   function cleanVINCode(code) {
     if (!code) return '';
     
-    // Remove any non-alphanumeric characters
-    code = code.replace(/[^A-Z0-9]/gi, '');
+    // Store the original code for comparison
+    const originalCode = code.trim().toUpperCase();
     
-    // Convert to uppercase
-    code = code.toUpperCase();
+    // Remove any non-alphanumeric characters
+    code = originalCode.replace(/[^A-Z0-9]/gi, '');
     
     // Handle common OCR/scanning mistranslations in VINs
     code = code.replace(/O/g, '0');  // Letter O → number 0
     code = code.replace(/I/g, '1');  // Letter I → number 1
     code = code.replace(/Q/g, '0');  // Letter Q → number 0
+    code = code.replace(/D/g, '0');  // Letter D can be misread as 0 in some fonts
+    code = code.replace(/B/g, '8');  // Letter B → number 8 (common in trailing digits)
+    code = code.replace(/S/g, '5');  // Letter S → number 5 (common in trailing digits)
+    code = code.replace(/Z/g, '2');  // Letter Z → number 2 (common in trailing digits)
     
-    // VINs don't use I, O, or Q characters, so this helps fix common scan issues
-    if (code.length === 17) {
-      // For a full VIN length, we can be more aggressive with corrections
-      code = code.replace(/[IOQ]/g, match => {
-        if (match === 'I') return '1';
-        return '0'; // O or Q → 0
-      });
+    // For the trailing part of VINs which are often numbers, be more aggressive with corrections
+    if (code.length >= 9) {
+      // Get the last 8 characters which are often the problematic part
+      const trailingPart = code.substring(code.length - 8);
+      const leadingPart = code.substring(0, code.length - 8);
+      
+      // Apply more aggressive corrections to the trailing part
+      let correctedTrailing = trailingPart
+        .replace(/G/g, '6')   // G can be misread as 6
+        .replace(/T/g, '7')   // T can be misread as 7
+        .replace(/L/g, '1')   // L can be misread as 1
+        .replace(/H/g, '4')   // H can sometimes be misread as 4
+        .replace(/U/g, '0')   // U can be misread as 0
+        .replace(/Y/g, '4');  // Y can sometimes be misread as 4
+      
+      // Reassemble the VIN
+      code = leadingPart + correctedTrailing;
+    }
+    
+    // Extra step: For Ford VINs specifically which often start with 1F, check and correct if needed
+    if (code.length >= 2 && code.substring(0, 2) === "IF") {
+      code = "1F" + code.substring(2); // Correct IF to 1F
     }
     
     return code;
@@ -848,6 +917,7 @@
   // Start continuous barcode detection
   function startBarcodeDetection() {
     scanActive = true;
+    recentScans = [];
     
     // Method 1: Use BarcodeDetector API if supported (modern browsers)
     if (barcodeDetectorSupported && barcodeDetector) {
@@ -862,7 +932,7 @@
             for (const barcode of barcodes) {
               const code = barcode.rawValue.trim();
               if (isValidVIN(code)) {
-                handleSuccessfulScan(code);
+                trackScan(code);
                 break;
               }
             }
@@ -870,7 +940,7 @@
         } catch (error) {
           console.error('Barcode detection error:', error);
         }
-      }, 200);
+      }, 150);
     } 
     // Method 2: Use ZXing-based approach
     else if (codeReader) {
@@ -880,12 +950,12 @@
         
         // Only process every 200ms to avoid overloading the CPU
         const now = Date.now();
-        if (now - lastProcessedTime < 200) return;
+        if (now - lastProcessedTime < 150) return;
         lastProcessedTime = now;
         
         // Capture frame for ZXing processing
         captureFrameAndDecode();
-      }, 200);
+      }, 150);
       
       scanFeedback.textContent = 'Scanning for VIN barcode...';
     }
@@ -896,7 +966,7 @@
     }
   }
   
-  // Capture frame and process with ZXing
+  // Capture frame and process with ZXing - optimized for trailing digits
   function captureFrameAndDecode() {
     try {
       const canvas = captureCanvas;
@@ -909,8 +979,8 @@
       // Draw current video frame to canvas
       ctx.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height);
       
-      // Get image data as base64
-      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+      // Get image data as base64 at full quality
+      const imageData = canvas.toDataURL('image/jpeg', 1.0);
       
       // Create an image element to load the data URL
       const img = new Image();
@@ -922,7 +992,7 @@
               if (result && result.text) {
                 const rawCode = result.text.trim();
                 if (isValidVIN(rawCode)) {
-                  handleSuccessfulScan(rawCode);
+                  trackScan(rawCode);
                 }
               }
             })
@@ -938,6 +1008,55 @@
     } catch (e) {
       console.error("Frame capture error:", e);
     }
+  }
+
+  // Track scans for consistency before accepting a result
+  function trackScan(code) {
+    // Add to our collection of recent scans
+    recentScans.push(code);
+    
+    // Show the current scan
+    displayScanResult(code);
+    
+    // If we have multiple scans, check for consistency
+    if (recentScans.length >= 2) {
+      const mostFrequent = findMostFrequentScan();
+      
+      // If we have a confident result (occurs multiple times), use it
+      if (mostFrequent && mostFrequent.count >= 2) {
+        handleSuccessfulScan(mostFrequent.code);
+      }
+    }
+    
+    // Limit to last 10 scans
+    if (recentScans.length > 10) {
+      recentScans.shift();
+    }
+  }
+  
+  // Find the most frequent scan in our recent scans
+  function findMostFrequentScan() {
+    const counts = {};
+    let maxCode = null;
+    let maxCount = 0;
+    
+    // Count occurrences
+    for (const code of recentScans) {
+      counts[code] = (counts[code] || 0) + 1;
+      if (counts[code] > maxCount) {
+        maxCount = counts[code];
+        maxCode = code;
+      }
+    }
+    
+    return maxCode ? { code: maxCode, count: maxCount } : null;
+  }
+  
+  // Display current scan result
+  function displayScanResult(code) {
+    const cleanedCode = cleanVINCode(code);
+    scanResultDisplay.textContent = cleanedCode;
+    scanResultDisplay.style.display = 'block';
   }
 
   // Check if a code is a valid VIN
@@ -962,6 +1081,8 @@
     // Show success message
     scanFeedback.textContent = 'VIN detected! ' + cleanedCode;
     document.getElementById('scan-region').classList.add('scan-success');
+    scanResultDisplay.textContent = cleanedCode;
+    scanResultDisplay.style.display = 'block';
     
     // Update VIN field
     vin.value = cleanedCode;
@@ -975,7 +1096,7 @@
       setTimeout(() => {
         vin.style.backgroundColor = "";
       }, 1500);
-    }, 1000);
+    }, 1500);
   }
 
   // Stop scanner
@@ -1015,6 +1136,7 @@
     document.getElementById('scan-region').classList.remove('scan-success');
     scannerContainer.classList.remove('visible');
     manualInputContainer.style.display = 'none';
+    scanResultDisplay.style.display = 'none';
   }
 
   // Toggle flashlight
