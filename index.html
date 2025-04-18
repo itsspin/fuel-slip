@@ -264,29 +264,6 @@
       background: rgba(0, 0, 0, 0.7);
     }
     
-    #scan-result {
-      position: absolute;
-      bottom: 140px;
-      left: 0;
-      width: 100%;
-      text-align: center;
-      padding: 0 20px;
-      box-sizing: border-box;
-    }
-    
-    #scan-result-display {
-      background: rgba(255, 255, 255, 0.9);
-      color: black;
-      padding: 10px 15px;
-      border-radius: 6px;
-      margin: 0 auto;
-      max-width: 300px;
-      font-family: monospace;
-      font-size: 16px;
-      letter-spacing: 1px;
-      display: none;
-    }
-    
     #manual-input-container {
       position: absolute;
       top: 50%;
@@ -540,10 +517,6 @@
     
     <button id="torch-toggle">💡</button>
     
-    <div id="scan-result">
-      <div id="scan-result-display"></div>
-    </div>
-    
     <div id="scan-modes">
       <button id="barcode-mode" class="active">Barcode</button>
       <button id="enter-manually">Enter Manually</button>
@@ -578,4 +551,587 @@
   const loadingOverlay = document.getElementById("loadingOverlay");
   const scannerContainer = document.getElementById("scanner-container");
   const scannerVideo = document.getElementById("scanner-video");
-  const scanFeedback = document.getElementById("scan-feedback
+  const scanFeedback = document.getElementById("scan-feedback");
+  const closeScanner = document.getElementById("close-scanner");
+  const scanBtn = document.getElementById("scanBtn");
+  const torchToggle = document.getElementById("torch-toggle");
+  const manualInputContainer = document.getElementById("manual-input-container");
+  const manualVinInput = document.getElementById("manual-vin");
+  const confirmManual = document.getElementById("confirm-manual");
+  const cancelManual = document.getElementById("cancel-manual");
+  const enterManually = document.getElementById("enter-manually");
+  const barcodeMode = document.getElementById("barcode-mode");
+  const captureCanvas = document.getElementById("capture-canvas");
+
+  const vin = document.getElementById("vin");
+  const start = document.getElementById("startGallons");
+  const end = document.getElementById("endGallons");
+  const used = document.getElementById("gallonsUsed");
+  const date = document.getElementById("date");
+  const station = document.getElementById("station");
+  const billTo = document.getElementById("billTo");
+  const initials = document.getElementById("initials");
+
+  // State variables
+  let videoStream = null;
+  let videoTrack = null;
+  let torchActive = false;
+  let barcodeDetector = null;
+  let scanActive = false;
+  let scanInterval = null;
+  let codeReader = null;
+  let lastProcessedTime = 0;
+  
+  // Detect operating systems
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /android/i.test(navigator.userAgent);
+
+  const options = { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' };
+  date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+
+  const confVin = document.getElementById("conf-vin");
+  const confStart = document.getElementById("conf-start");
+  const confEnd = document.getElementById("conf-end");
+  const confUsed = document.getElementById("conf-used");
+  const confDate = document.getElementById("conf-date");
+  const confStation = document.getElementById("conf-station");
+  const confBillTo = document.getElementById("conf-billTo");
+  const confUser = document.getElementById("conf-user");
+
+  const cVin = document.getElementById("c-vin");
+  const cStart = document.getElementById("c-start");
+  const cEnd = document.getElementById("c-end");
+  const cUsed = document.getElementById("c-used");
+  const cDate = document.getElementById("c-date");
+  const cStation = document.getElementById("c-station");
+  const cBillTo = document.getElementById("c-billTo");
+  const cUser = document.getElementById("c-user");
+
+  // Check if BarcodeDetector is supported
+  const barcodeDetectorSupported = 'BarcodeDetector' in window;
+  
+  // Initialize ZXing reader for fallback
+  try {
+    const { BrowserMultiFormatReader } = window.ZXing;
+    if (BrowserMultiFormatReader) {
+      codeReader = new BrowserMultiFormatReader();
+      console.log("ZXing initialized successfully");
+    }
+  } catch (err) {
+    console.error("ZXing initialization error:", err);
+  }
+
+  if (localStorage.getItem("fuelLogin") === "yes") {
+    loginScreen.classList.remove("visible");
+    fuelForm.classList.add("visible");
+  }
+
+  function checkLogin() {
+    const pass = document.getElementById("loginPass").value;
+    if (pass === "midway123") {
+      localStorage.setItem("fuelLogin", "yes");
+      loginScreen.classList.remove("visible");
+      fuelForm.classList.add("visible");
+    } else {
+      alert("Incorrect password.");
+    }
+  }
+
+  function calc() {
+    const s = parseFloat(start.value) || 0;
+    const e = parseFloat(end.value) || 0;
+    used.value = e - s >= 0 ? (e - s).toFixed(2) : 0;
+  }
+
+  start.addEventListener("input", calc);
+  end.addEventListener("input", calc);
+  
+  // Process VIN input - updated to keep full VIN if provided
+  vin.addEventListener("blur", function() {
+    let vinValue = this.value.trim().toUpperCase();
+    this.value = vinValue;
+  });
+
+  fuelForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    confVin.textContent = vin.value.toUpperCase();
+    confStart.textContent = start.value;
+    confEnd.textContent = end.value;
+    confUsed.textContent = used.value;
+    confDate.textContent = date.value;
+    confStation.textContent = station.value;
+    confBillTo.textContent = billTo.value.toUpperCase();
+    confUser.textContent = initials.value.toUpperCase();
+    fuelForm.classList.remove("visible");
+    confirmationPage.classList.add("visible");
+  });
+
+  document.getElementById("confirmSubmit").addEventListener("click", async () => {
+    // Show loading spinner
+    loadingOverlay.style.display = "flex";
+    
+    const data = new URLSearchParams();
+    data.append("vin", vin.value.trim().toUpperCase());
+    data.append("startGallons", start.value);
+    data.append("endGallons", end.value);
+    data.append("gallonsUsed", used.value);
+    data.append("date", date.value);
+    data.append("station", station.value);
+    data.append("billTo", billTo.value.trim().toUpperCase());
+    data.append("initials", initials.value.trim().toUpperCase());
+
+    try {
+      await fetch("https://script.google.com/macros/s/AKfycbw0H3rElOwvOh-zMC1cOaKzwsE0441x6ABaYqCJhsG8nY0Vj5tI3fYWkcynl2A_IOE/exec", {
+        method: "POST",
+        mode: "no-cors",
+        body: data
+      });
+
+      cVin.textContent = vin.value.toUpperCase();
+      cStart.textContent = start.value;
+      cEnd.textContent = end.value;
+      cUsed.textContent = used.value;
+      cDate.textContent = date.value;
+      cStation.textContent = station.value;
+      cBillTo.textContent = billTo.value.toUpperCase();
+      cUser.textContent = initials.value.toUpperCase();
+
+      confirmationPage.classList.remove("visible");
+      
+      // Send Email via EmailJS
+      try {
+        await emailjs.send("service_jbw2q2o", "template_azb4var", {
+          vin: vin.value.trim().toUpperCase(),
+          startGallons: start.value,
+          endGallons: end.value,
+          gallonsUsed: used.value,
+          date: date.value,
+          station: station.value,
+          billTo: billTo.value.trim().toUpperCase(),
+          initials: initials.value.trim().toUpperCase()
+        });
+      } catch (emailError) {
+        console.error("EmailJS error:", emailError);
+        // Continue even if email fails - data is already saved to sheet
+      }
+      
+      // Hide loading spinner and show confirmation
+      loadingOverlay.style.display = "none";
+      finalConfirmation.classList.add("visible");
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      loadingOverlay.style.display = "none";
+      alert("There was an error submitting the form. Please try again.");
+      confirmationPage.classList.add("visible");
+    }
+  });
+
+  function goBack() {
+    confirmationPage.classList.remove("visible");
+    fuelForm.classList.add("visible");
+  }
+
+  function resetForm() {
+    fuelForm.reset();
+    date.value = new Intl.DateTimeFormat('en-US', options).format(new Date());
+    finalConfirmation.classList.remove("visible");
+    fuelForm.classList.add("visible");
+  }
+
+  // VIN Scanner Implementation
+  async function startScanner() {
+    scannerContainer.classList.add('visible');
+    manualInputContainer.style.display = 'none';
+    
+    // Reset scanner feedback
+    scanFeedback.textContent = 'Starting camera...';
+    
+    try {
+      // Create BarcodeDetector if supported
+      if (barcodeDetectorSupported) {
+        try {
+          barcodeDetector = new BarcodeDetector({
+            formats: ['code_39', 'code_128']
+          });
+        } catch (e) {
+          console.error("BarcodeDetector initialization error:", e);
+          barcodeDetector = null;
+        }
+      }
+      
+      // Prepare camera constraints based on platform
+      let constraints = {
+        video: {
+          facingMode: 'environment',
+        },
+        audio: false
+      };
+      
+      // Platform-specific adjustments
+      if (isIOS) {
+        // iOS sometimes works better with simpler constraints
+        constraints.video = { facingMode: 'environment' };
+      } else if (isAndroid) {
+        // Android can handle more detailed constraints
+        constraints.video = {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        };
+      }
+      
+      // Start the camera
+      videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+      videoTrack = videoStream.getVideoTracks()[0];
+      
+      // Check if torch is available
+      const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+      torchToggle.style.display = capabilities.torch ? 'flex' : 'none';
+      
+      // Set video source
+      scannerVideo.srcObject = videoStream;
+      
+      // Special handling for iOS Safari which sometimes doesn't play automatically
+      try {
+        await scannerVideo.play();
+      } catch (playError) {
+        console.error("Error playing video:", playError);
+        // For iOS Safari, we might need user interaction
+        if (isIOS) {
+          scanFeedback.textContent = 'Tap screen to activate camera';
+          scannerVideo.addEventListener('click', function activateCamera() {
+            scannerVideo.play();
+            scannerVideo.removeEventListener('click', activateCamera);
+            scanFeedback.textContent = 'Position VIN barcode in the box';
+          }, { once: true });
+        }
+      }
+      
+      // Start barcode detection
+      startBarcodeDetection();
+      
+      scanFeedback.textContent = 'Position VIN barcode in the box';
+    } catch (error) {
+      console.error('Error starting camera:', error);
+      scanFeedback.textContent = 'Camera access failed. Please check permissions.';
+    }
+  }
+
+  // Simple VIN cleaning function that preserves B characters
+  function cleanVINCode(code) {
+    if (!code) return '';
+    
+    // Remove any non-alphanumeric characters
+    code = code.replace(/[^A-Z0-9]/gi, '');
+    
+    // Convert to uppercase
+    code = code.toUpperCase();
+    
+    // Handle common OCR mistranslations in VINs (but keep B as B)
+    code = code.replace(/O/g, '0');  // Letter O → number 0
+    code = code.replace(/I/g, '1');  // Letter I → number 1
+    code = code.replace(/Q/g, '0');  // Letter Q → number 0
+    
+    // Make sure we don't add an extra 1 at the beginning
+    if (code.startsWith("1F") && code.length > 17) {
+      code = code.substring(0, 17);
+    }
+    
+    return code;
+  }
+
+  // Start continuous barcode detection
+  function startBarcodeDetection() {
+    scanActive = true;
+    
+    // Method 1: Use BarcodeDetector API if supported (modern browsers)
+    if (barcodeDetectorSupported && barcodeDetector) {
+      console.log("Using BarcodeDetector API");
+      scanInterval = setInterval(async () => {
+        if (!scanActive) return;
+        
+        try {
+          const barcodes = await barcodeDetector.detect(scannerVideo);
+          
+          if (barcodes.length > 0) {
+            for (const barcode of barcodes) {
+              const code = barcode.rawValue.trim();
+              if (isValidVIN(code)) {
+                handleSuccessfulScan(code);
+                break;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Barcode detection error:', error);
+        }
+      }, 200);
+    } 
+    // Method 2: Use ZXing-based approach
+    else if (codeReader) {
+      console.log("Using ZXing library");
+      scanInterval = setInterval(() => {
+        if (!scanActive) return;
+        
+        // Only process every 200ms to avoid overloading the CPU
+        const now = Date.now();
+        if (now - lastProcessedTime < 200) return;
+        lastProcessedTime = now;
+        
+        // Capture frame for ZXing processing
+        captureFrameAndDecode();
+      }, 200);
+      
+      scanFeedback.textContent = 'Scanning for VIN barcode...';
+    }
+    // Fallback to manual capture only
+    else {
+      console.log("No barcode library available, using manual mode only");
+      scanFeedback.textContent = 'Barcode detection not available on this device. Please enter VIN manually.';
+    }
+  }
+  
+  // Capture frame and process with ZXing
+  function captureFrameAndDecode() {
+    try {
+      const canvas = captureCanvas;
+      const ctx = canvas.getContext('2d');
+      
+      // Set canvas dimensions to match video
+      canvas.width = scannerVideo.videoWidth;
+      canvas.height = scannerVideo.videoHeight;
+      
+      // Draw current video frame to canvas
+      ctx.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height);
+      
+      // Get image data as base64
+      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+      
+      // Create an image element to load the data URL
+      const img = new Image();
+      img.onload = function() {
+        try {
+          // Use ZXing to decode the image
+          codeReader.decodeFromImage(undefined, imageData)
+            .then(result => {
+              if (result && result.text) {
+                const code = result.text.trim();
+                if (isValidVIN(code)) {
+                  handleSuccessfulScan(code);
+                }
+              }
+            })
+            .catch(err => {
+              // Silently fail - normal for frames without barcodes
+            });
+        } catch (e) {
+          console.error("ZXing processing error:", e);
+        }
+      };
+      
+      img.src = imageData;
+    } catch (e) {
+      console.error("Frame capture error:", e);
+    }
+  }
+
+  // Check if a code is a valid VIN
+  function isValidVIN(code) {
+    if (!code) return false;
+    
+    // Basic validation - at least 8 chars for partial VIN, alphanumeric
+    return code.length >= 8 && /^[A-Z0-9]+$/i.test(code);
+  }
+
+  // Handle successful scan
+  function handleSuccessfulScan(code) {
+    if (!scanActive) return;
+    
+    // Stop scanning
+    scanActive = false;
+    clearInterval(scanInterval);
+    
+    // Clean and normalize the VIN code - preserving B characters
+    const cleanedCode = cleanVINCode(code);
+    
+    // Show success message
+    scanFeedback.textContent = 'VIN detected! ' + cleanedCode;
+    document.getElementById('scan-region').classList.add('scan-success');
+    
+    // Update VIN field
+    vin.value = cleanedCode;
+    
+    // Close scanner after delay
+    setTimeout(() => {
+      stopScanner();
+      
+      // Highlight the VIN field briefly
+      vin.style.backgroundColor = "#d4edda";
+      setTimeout(() => {
+        vin.style.backgroundColor = "";
+      }, 1500);
+    }, 1000);
+  }
+
+  // Stop scanner
+  function stopScanner() {
+    scanActive = false;
+    
+    // Clear scan interval
+    if (scanInterval) {
+      clearInterval(scanInterval);
+      scanInterval = null;
+    }
+    
+    // Turn off torch if active
+    if (torchActive && videoTrack) {
+      try {
+        videoTrack.applyConstraints({ advanced: [{ torch: false }] });
+        torchActive = false;
+        torchToggle.classList.remove('active');
+      } catch (e) {
+        console.error('Error turning off torch:', e);
+      }
+    }
+    
+    // Stop video stream
+    if (videoStream) {
+      videoStream.getTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();
+        }
+      });
+      scannerVideo.srcObject = null;
+      videoStream = null;
+      videoTrack = null;
+    }
+    
+    // Reset UI
+    document.getElementById('scan-region').classList.remove('scan-success');
+    scannerContainer.classList.remove('visible');
+    manualInputContainer.style.display = 'none';
+  }
+
+  // Toggle flashlight
+  function toggleTorch() {
+    if (!videoTrack) return;
+    
+    try {
+      torchActive = !torchActive;
+      
+      // Different handling for iOS
+      if (isIOS) {
+        // iOS sometimes needs this specific format
+        videoTrack.applyConstraints({
+          advanced: [{ torch: torchActive }]
+        }).catch(error => {
+          console.error("iOS torch error:", error);
+          scanFeedback.textContent = "Flashlight not available on this device";
+          setTimeout(() => {
+            scanFeedback.textContent = "Position VIN barcode in the box";
+          }, 2000);
+        });
+      } else {
+        // Standard approach for other devices
+        videoTrack.applyConstraints({
+          advanced: [{ torch: torchActive }]
+        });
+      }
+      
+      torchToggle.classList.toggle('active', torchActive);
+    } catch (error) {
+      console.error('Error toggling torch:', error);
+      scanFeedback.textContent = 'Flashlight not available on this device';
+      setTimeout(() => {
+        scanFeedback.textContent = 'Position VIN barcode in the box';
+      }, 2000);
+    }
+  }
+
+  // Show manual input
+  function showManualInput() {
+    scanActive = false;
+    if (scanInterval) {
+      clearInterval(scanInterval);
+    }
+    
+    manualInputContainer.style.display = 'block';
+    manualVinInput.focus();
+    
+    // Update button states
+    barcodeMode.classList.remove('active');
+    enterManually.classList.add('active');
+  }
+
+  // Hide manual input
+  function hideManualInput() {
+    manualInputContainer.style.display = 'none';
+    manualVinInput.value = '';
+    
+    // Update button states
+    barcodeMode.classList.add('active');
+    enterManually.classList.remove('active');
+    
+    // Resume scanning
+    startBarcodeDetection();
+  }
+
+  // Process manual VIN entry
+  function confirmManualVin() {
+    const manualVinCode = manualVinInput.value.trim().toUpperCase();
+    if (isValidVIN(manualVinCode)) {
+      vin.value = cleanVINCode(manualVinCode);
+      vin.style.backgroundColor = "#d4edda";
+      setTimeout(() => {
+        vin.style.backgroundColor = "";
+      }, 1500);
+      
+      stopScanner();
+    } else {
+      alert('Please enter a valid VIN (at least 8 alphanumeric characters)');
+    }
+  }
+
+  // Add event listeners
+  scanBtn.addEventListener('click', startScanner);
+  closeScanner.addEventListener('click', stopScanner);
+  torchToggle.addEventListener('click', toggleTorch);
+  enterManually.addEventListener('click', showManualInput);
+  barcodeMode.addEventListener('click', hideManualInput);
+  confirmManual.addEventListener('click', confirmManualVin);
+  cancelManual.addEventListener('click', hideManualInput);
+  
+  // Listen for manual VIN input key press (enter)
+  manualVinInput.addEventListener('keyup', function(event) {
+    if (event.key === 'Enter') {
+      confirmManualVin();
+    }
+  });
+  
+  // Support for fullscreen click activation (helps on iOS)
+  scannerVideo.addEventListener('click', function() {
+    if (isIOS && scannerVideo.paused) {
+      scannerVideo.play().catch(err => {
+        console.error("Error playing video after click:", err);
+      });
+    }
+  });
+  
+  // Handle page unload - clean up resources
+  window.addEventListener('beforeunload', () => {
+    if (videoStream) {
+      videoStream.getTracks().forEach(track => track.stop());
+    }
+    
+    if (codeReader) {
+      try {
+        codeReader.reset();
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    }
+  });
+</script>
+</body>
+</html>
