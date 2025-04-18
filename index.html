@@ -613,10 +613,19 @@
   
   // Initialize ZXing reader for fallback
   try {
-    const { BrowserMultiFormatReader } = window.ZXing;
+    const { BrowserMultiFormatReader, DecodeHintType } = window.ZXing;
     if (BrowserMultiFormatReader) {
-      codeReader = new BrowserMultiFormatReader();
-      console.log("ZXing initialized successfully");
+      // Set hints for better VIN scanning
+      const hints = new Map();
+      if (DecodeHintType) {
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        hints.set(DecodeHintType.ASSUME_CODE_39_CHECK_DIGIT, false);
+        hints.set(DecodeHintType.RELAXED_CODE_39_EXTENDED_MODE, true);
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, ["CODE_39", "CODE_128"]);
+      }
+      
+      codeReader = new BrowserMultiFormatReader(hints);
+      console.log("ZXing initialized successfully with custom hints");
     }
   } catch (err) {
     console.error("ZXing initialization error:", err);
@@ -818,6 +827,29 @@
     }
   }
 
+  // Function to clean up VIN codes
+  function cleanVINCode(code) {
+    // Remove any non-alphanumeric characters
+    code = code.replace(/[^A-Z0-9]/gi, '');
+    
+    // Convert to uppercase
+    code = code.toUpperCase();
+    
+    // Handle common OCR mistranslations in VINs
+    code = code.replace(/O/g, '0');  // Replace letter O with number 0
+    code = code.replace(/I/g, '1');  // Replace letter I with number 1
+    code = code.replace(/Z/g, '2');  // Sometimes Z is misread as 2
+    code = code.replace(/S/g, '5');  // Sometimes S is misread as 5
+    code = code.replace(/B/g, '8');  // Sometimes B is misread as 8
+    
+    // Validate the VIN length (most VINs are 17 characters)
+    if (code.length > 17) {
+      code = code.substring(0, 17);
+    }
+    
+    return code;
+  }
+
   // Start continuous barcode detection
   function startBarcodeDetection() {
     scanActive = true;
@@ -833,9 +865,9 @@
           
           if (barcodes.length > 0) {
             for (const barcode of barcodes) {
-              const code = barcode.rawValue.trim().toUpperCase();
-              if (isValidVIN(code)) {
-                handleSuccessfulScan(code);
+              const rawCode = barcode.rawValue.trim();
+              if (isValidVIN(rawCode)) {
+                handleSuccessfulScan(rawCode);
                 break;
               }
             }
@@ -876,14 +908,16 @@
       const ctx = canvas.getContext('2d');
       
       // Set canvas dimensions to match video
-      canvas.width = scannerVideo.videoWidth;
-      canvas.height = scannerVideo.videoHeight;
+      const videoWidth = scannerVideo.videoWidth;
+      const videoHeight = scannerVideo.videoHeight;
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
       
       // Draw current video frame to canvas
       ctx.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height);
       
-      // Get image data as base64
-      const imageData = canvas.toDataURL('image/jpeg', 0.75);
+      // Get image data as base64 with improved quality
+      const imageData = canvas.toDataURL('image/jpeg', 0.9); // Increased quality
       
       // Create an image element to load the data URL
       const img = new Image();
@@ -893,15 +927,14 @@
           codeReader.decodeFromImage(undefined, imageData)
             .then(result => {
               if (result && result.text) {
-                const code = result.text.trim().toUpperCase();
+                const code = result.text.trim();
                 if (isValidVIN(code)) {
                   handleSuccessfulScan(code);
                 }
               }
             })
             .catch(err => {
-              // Silently fail - normal for frames without barcodes
-              // console.error("ZXing decode error:", err);
+              // Silent fail for frames without barcodes
             });
         } catch (e) {
           console.error("ZXing processing error:", e);
@@ -916,8 +949,14 @@
 
   // Check if a code is a valid VIN
   function isValidVIN(code) {
-    // Basic VIN validation - at least 8 chars, alphanumeric
-    return code && code.length >= 8 && /^[A-Z0-9]+$/.test(code);
+    if (!code) return false;
+    
+    // Clean the code first
+    code = cleanVINCode(code);
+    
+    // Basic VIN validation
+    // Most manufacturers use 17-char VINs, but accept 8+ to handle partial VINs
+    return code.length >= 8 && /^[A-Z0-9]+$/.test(code);
   }
 
   // Handle successful scan
@@ -927,6 +966,9 @@
     // Stop scanning
     scanActive = false;
     clearInterval(scanInterval);
+    
+    // Clean up and normalize the VIN code
+    code = cleanVINCode(code);
     
     // Show success message
     scanFeedback.textContent = 'VIN detected! ' + code;
